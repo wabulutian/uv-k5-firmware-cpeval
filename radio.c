@@ -46,7 +46,7 @@ STEP_Setting_t gStepSetting;
 
 VfoState_t VfoState[2];
 
-const char *modulationTypeOptions[] = {" FM", " AM", "SSB", "BYP", "RAW"};
+const char *modulationTypeOptions[] = {" FM", " AM", "DSB", "BYP", "RAW"};
 const char *vfoStateNames[] = {
     "NORMAL", "BUSY", "BAT LOW", "DISABLE", "TIMEOUT", "ALARM", "VOL HIGH",
 };

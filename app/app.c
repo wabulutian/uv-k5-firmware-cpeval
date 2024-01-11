@@ -878,7 +878,7 @@ void APP_CheckKeys(void) {
 void APP_TimeSlice10ms(void) {
   gFlashLightBlinkCounter++;
 
-#if defined(ENABLE_UART)
+#if defined(ENABLE_UART_CAT)
   if (UART_IsCommandAvailable()) {
     __disable_irq();
     UART_HandleCommand();

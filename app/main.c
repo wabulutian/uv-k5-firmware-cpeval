@@ -24,7 +24,9 @@
 #include "app/generic.h"
 #include "app/main.h"
 #include "app/scanner.h"
+#if defined(ENABLE_SPECTRUM)
 #include "app/spectrum.h"
+#endif
 #include "audio.h"
 #include "dtmf.h"
 #include "frequencies.h"
@@ -33,6 +35,9 @@
 #include "settings.h"
 #include "ui/inputbox.h"
 #include "ui/ui.h"
+#if defined(ENABLE_SATPASS)
+#include "satpass/satpass.h"
+#endif
 
 static void SwitchActiveVFO() {
   uint8_t Vfo = gEeprom.TX_CHANNEL;
@@ -191,8 +196,11 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld) {
 
   case KEY_5:
     gCurrentFunction = 0;
-    APP_RunSpectrum();
     gRequestDisplayScreen = DISPLAY_MAIN;
+    #if defined(ENABLE_SPECTRUM)
+    APP_RunSpectrum();
+    #endif
+    APP_RunSatpass();
     break;
 
   case KEY_6:

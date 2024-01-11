@@ -1,10 +1,10 @@
-TARGET = firmware
+TARGET = uv-k5-firmware-satpass
 
 ENABLE_AIRCOPY := 0
 ENABLE_AM_FIX := 1
 ENABLE_FMRADIO := 0
 ENABLE_OVERLAY := 0
-ENABLE_SPECTRUM := 1
+ENABLE_SPECTRUM := 0
 ENABLE_SWD := 0
 ENABLE_TX1750 := 1
 ENABLE_UART := 1
@@ -12,10 +12,13 @@ ENABLE_NOSCANTIMEOUT := 1
 ENABLE_KEEPNAMEONSAVE := 1
 ENABLE_ALL_REGISTERS := 1
 ENABLE_FASTER_CHANNEL_SCAN := 1
-ENABLE_UART_CAT := 1
+ENABLE_UART_CAT := 0
 
-SPECTRUM_AUTOMATIC_SQUELCH := 1
-SPECTRUM_EXTRA_VALUES := 1
+ENABLE_SATPASS := 1
+ENABLE_LOCK := 0
+
+SPECTRUM_AUTOMATIC_SQUELCH := 0
+SPECTRUM_EXTRA_VALUES := 0
 
 BSP_DEFINITIONS := $(wildcard hardware/*/*.def)
 BSP_HEADERS := $(patsubst hardware/%,bsp/%,$(BSP_DEFINITIONS))
@@ -79,8 +82,14 @@ OBJS += app/scanner.o
 ifeq ($(ENABLE_SPECTRUM), 1)
 OBJS += app/spectrum.o
 endif
-ifeq ($(ENABLE_UART),1)
+ifeq ($(ENABLE_UART_CAT),1)
 OBJS += app/uart.o
+endif
+ifeq ($(ENABLE_SATPASS),1)
+OBJS += satpass/satpass.o
+OBJS += satpass/satpass_uart.o
+OBJS += satpass/satpass_ui.o
+OBJS += driver/rtc.o
 endif
 OBJS += audio.o
 OBJS += bitmaps.o
@@ -105,7 +114,9 @@ OBJS += ui/fmradio.o
 endif
 OBJS += ui/helper.o
 OBJS += ui/inputbox.o
+ifeq ($(ENABLE_LOCK),1)
 OBJS += ui/lock.o
+endif
 OBJS += ui/main.o
 OBJS += ui/menu.o
 OBJS += ui/rssi.o
@@ -135,7 +146,7 @@ ASFLAGS = -c -mcpu=cortex-m0
 ifeq ($(ENABLE_OVERLAY),1)
 ASFLAGS += -DENABLE_OVERLAY
 endif
-CFLAGS = -Os -Wall -Werror -mcpu=cortex-m0 -fno-builtin -fshort-enums -fno-delete-null-pointer-checks -std=c11 -MMD
+CFLAGS = -Os -Wall -mcpu=cortex-m0 -fno-builtin -fshort-enums -fno-delete-null-pointer-checks -std=c11 -MMD
 CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -DGIT_HASH=\"$(GIT_HASH)\"
 ifeq ($(ENABLE_AIRCOPY),1)

@@ -1,24 +1,18 @@
-TARGET = uv-k5-firmware-satpass
+TARGET = uv-k5-firmware-cpeval
 
 ENABLE_AIRCOPY := 0
 ENABLE_AM_FIX := 1
-ENABLE_FMRADIO := 0
+#ENABLE_FMRADIO := 1
 ENABLE_OVERLAY := 0
-ENABLE_SPECTRUM := 0
 ENABLE_SWD := 0
 ENABLE_TX1750 := 1
 ENABLE_UART := 1
-ENABLE_NOSCANTIMEOUT := 1
+ENABLE_NOSCANTIMEOUT := 0
 ENABLE_KEEPNAMEONSAVE := 1
-ENABLE_ALL_REGISTERS := 1
 ENABLE_FASTER_CHANNEL_SCAN := 1
-ENABLE_UART_CAT := 0
-
-ENABLE_SATPASS := 1
-ENABLE_LOCK := 0
-
-SPECTRUM_AUTOMATIC_SQUELCH := 0
-SPECTRUM_EXTRA_VALUES := 0
+#ENABLE_UART_CAT := 0
+ENABLE_CP := 1
+#ENABLE_LOCK := 0
 
 BSP_DEFINITIONS := $(wildcard hardware/*/*.def)
 BSP_HEADERS := $(patsubst hardware/%,bsp/%,$(BSP_DEFINITIONS))
@@ -60,6 +54,7 @@ OBJS += driver/systick.o
 ifeq ($(ENABLE_UART),1)
 OBJS += driver/uart.o
 endif
+OBJS += driver/rtc.o
 
 # Main
 OBJS += app/action.o
@@ -79,18 +74,17 @@ OBJS += app/generic.o
 OBJS += app/main.o
 OBJS += app/menu.o
 OBJS += app/scanner.o
-ifeq ($(ENABLE_SPECTRUM), 1)
-OBJS += app/spectrum.o
-endif
 ifeq ($(ENABLE_UART_CAT),1)
 OBJS += app/uart.o
 endif
-ifeq ($(ENABLE_SATPASS),1)
-OBJS += satpass/satpass.o
-OBJS += satpass/satpass_uart.o
-OBJS += satpass/satpass_ui.o
-OBJS += driver/rtc.o
+ifeq ($(ENABLE_CP),1)
+OBJS += coprocessor/simpleProtocol/simpleProtocol.o
+OBJS += coprocessor/coprocessor.o
+OBJS += coprocessor/cp_uart.o
+OBJS += coprocessor/cp_i2c.o
+OBJS += coprocessor/cp_ui.o
 endif
+
 OBJS += audio.o
 OBJS += bitmaps.o
 OBJS += board.o
@@ -161,9 +155,6 @@ endif
 ifeq ($(ENABLE_OVERLAY),1)
 CFLAGS += -DENABLE_OVERLAY
 endif
-ifeq ($(ENABLE_SPECTRUM),1)
-CFLAGS += -DENABLE_SPECTRUM
-endif
 ifeq ($(ENABLE_SWD),1)
 CFLAGS += -DENABLE_SWD
 endif
@@ -183,17 +174,8 @@ endif
 ifeq ($(ENABLE_FASTER_CHANNEL_SCAN),1)
 CFLAGS  += -DENABLE_FASTER_CHANNEL_SCAN
 endif
-ifeq ($(ENABLE_ALL_REGISTERS),1)
-CFLAGS += -DENABLE_ALL_REGISTERS
-endif
 ifeq ($(ENABLE_UART_CAT),1)
 CFLAGS += -DENABLE_UART_CAT
-endif
-ifeq ($(SPECTRUM_AUTOMATIC_SQUELCH),1)
-CFLAGS += -DSPECTRUM_AUTOMATIC_SQUELCH
-endif
-ifeq ($(SPECTRUM_EXTRA_VALUES),1)
-CFLAGS += -DSPECTRUM_EXTRA_VALUES
 endif
 
 ifeq ($(DEBUG),1)

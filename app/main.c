@@ -35,8 +35,8 @@
 #include "settings.h"
 #include "ui/inputbox.h"
 #include "ui/ui.h"
-#if defined(ENABLE_SATPASS)
-#include "satpass/satpass.h"
+#if defined(ENABLE_CP)
+#include "coprocessor/coprocessor.h"
 #endif
 
 static void SwitchActiveVFO() {
@@ -197,10 +197,7 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld) {
   case KEY_5:
     gCurrentFunction = 0;
     gRequestDisplayScreen = DISPLAY_MAIN;
-    #if defined(ENABLE_SPECTRUM)
-    APP_RunSpectrum();
-    #endif
-    APP_RunSatpass();
+    CP_APP_RunCoprocessor();
     break;
 
   case KEY_6:

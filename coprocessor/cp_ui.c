@@ -1,8 +1,16 @@
 #include "coprocessor/cp_ui.h"
 
+uint8_t cp_menuItemNum = 5;
 const char* cp_freqChangeStepDisp[] = {"100k", "10k ", "1k  ", "0.1k"};
-
+static const char cp_menuList[][7] = {
+	"PASS",
+	"SAT",
+	"QTH",
+	"TIME",
+	"PRED"
+};
 static char String[32];
+static char String2[32];
 
 void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 {
@@ -136,28 +144,25 @@ void CP_UI_DrawRadar(st_PassInfo pass)
 	}
 }
 
-void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, bool isFreqInputMode, char* p_freqInputString, bool isTx)
+void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, enum_FrequencyTrackMode mode, bool isFreqInputMode, char* p_freqInputString, bool isTx)
 {
     // Frequency unit in BK4819 is 10Hz
     sprintf(String, "%lu.%03lu %03lu", rx10hz / 100000, rx10hz % 100000 / 100, rx10hz % 100 * 10);
-    if (isFreqInputMode && !(channel == CH_TX)) 
-    {
-        UI_PrintStringSmallBold(p_freqInputString, 0, 127, 0);
-    } else {
-        UI_PrintStringSmallBold(String, 0, 127, 0);
-    }
+	sprintf(String2, "%lu.%03lu %03lu", tx10hz / 100000, tx10hz % 100000 / 100, tx10hz % 100 * 10);
 
-    sprintf(String, "%lu.%03lu %03lu", tx10hz / 100000, tx10hz % 100000 / 100, tx10hz % 100 * 10);
-    if (isFreqInputMode && channel == CH_TX) 
-    {
-        UI_PrintStringSmallBold(p_freqInputString, 0, 127, 1);
-    } else {
-        UI_PrintStringSmallBold(String, 0, 127, 1);
-    }
+	if (channel == CH_RX || channel == CH_RXMASTER)
+	{
+		UI_PrintStringSmallBold(isFreqInputMode ? p_freqInputString : String, 0, 127, 0);
+		UI_PrintStringSmall(String2, 0, 127, 1);
+	} else {
+		UI_PrintStringSmall(String, 0, 127, 0);
+		UI_PrintStringSmallBold(isFreqInputMode ? p_freqInputString : String2, 0, 127, 1);
+	}
 
 	sprintf(String, "Rx");
 	UI_PrintStringSmallest(String, 5, 1, false, true);
-	if (!isTx) {
+	if (!isTx) 
+	{
 		sprintf(String, "Tx");
 		UI_PrintStringSmallest(String, 5, 9, false, true);
 	} else {
@@ -177,38 +182,43 @@ void CP_UI_DrawQuickMenu(char* item1, char* item2, char* item3, uint8_t sel, boo
         {
 			for (int j = 0; j < QUICKMENU_CELL_WIDTH; j ++) 
             {
-				gFrameBuffer[3 + i][j] = 0x7F;
+				gFrameBuffer[3 + i][j] = 0b11111110;
 			}
 		}
     }
-    UI_PrintStringSmallest(item1, 2, 3 * 8 + 1, false, !(enable && sel == 1));
-    UI_PrintStringSmallest(item2, 2, 4 * 8 + 1, false, !(enable && sel == 2));
-    UI_PrintStringSmallest(item3, 2, 5 * 8 + 1, false, !(enable && sel == 3));
+    UI_PrintStringSmallest(item1, 2, 3 * 8 + 2, false, !(enable && sel == 1));
+    UI_PrintStringSmallest(item2, 2, 4 * 8 + 2, false, !(enable && sel == 2));
+    UI_PrintStringSmallest(item3, 2, 5 * 8 + 2, false, !(enable && sel == 3));
 }
 
 void CP_UI_DrawRssi(int dbm, uint8_t s, double enable)
 {
-    for (int i = 0; i < 51; i ++) {
-		if (i % 5 == 0) {
-			gFrameBuffer[2][i + RSSI_METER_PADDING_LEFT] |= 0b00110000;
+    for (int i = 0; i < 46; i ++) 
+	{
+		if (i % 5 == 0) 
+		{
+			gFrameBuffer[2][i + RSSI_METER_PADDING_LEFT] |= 0b01100000;
 		} else {
-			gFrameBuffer[2][i + RSSI_METER_PADDING_LEFT] |= 0b00100000;
+			gFrameBuffer[2][i + RSSI_METER_PADDING_LEFT] |= 0b01000000;
 		}
 	}
 
     s = s >= 10 ? 10 : s;
-	if (enable) {
+	if (enable) 
+	{
 		sprintf(String, "%ddBm", dbm);
-		UI_PrintStringSmallest(String, 0, 17, false, true);
+		UI_PrintStringSmallest(String, 0, 18, false, true);
 		if (s < 10) sprintf(String, "S%u", s);
 		else sprintf(String, "S9+");
-		UI_PrintStringSmallest(String, 32, 17, false, true);
+		UI_PrintStringSmallest(String, 32, 18, false, true);
 
-        for (int i = 0; i < s + 1; i ++) {
-		for (int j = 0; j < 5; j ++) {
-			gFrameBuffer[2][i * 5 + j + RSSI_METER_PADDING_LEFT] |= 0b00001110;
+        for (int i = 0; i < s; i ++) 
+		{
+			for (int j = 0; j < 5; j ++) 
+			{
+				gFrameBuffer[2][i * 5 + j + RSSI_METER_PADDING_LEFT] |= 0b00011100;
+			}
 		}
-	}
 	} else {
 		sprintf(String, "------- --");
 		UI_PrintStringSmallest(String, 0, 17, false, true);
@@ -247,28 +257,56 @@ void CP_UI_DrawChannelIcon(enum_FreqChannel currentChannel)
 
 void CP_UI_DrawDateTime(st_Time time)
 {
-    sprintf(String, "%d.%02d.%02d %02d:%02d:%02d", time.year, time.month, time.day, time.hour, time.min, time.sec);
-	UI_PrintStringSmallest(String, 0, 48, false, true);
+    //sprintf(String, "%d.%02d.%02d %02d:%02d:%02d", time.year, time.month, time.day, time.hour, time.min, time.sec);
+	sprintf(String, "2024.03.27 23:01:00");
+	UI_PrintStringSmallest(String, 2, 50, false, true);
 }
 
 void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw, uint8_t battLevel)
 {
-	gStatusLine[127] = 0b01111110;
-	for (int i = 126; i >= 116; i--) {
-		gStatusLine[i] = 0b01000010;
+	gStatusLine[127] = 0b00111111;
+	for (int i = 126; i >= 116; i--) 
+	{
+		gStatusLine[i] = 0b00100001;
 	}
 	battLevel <<= 1;
-	for (int i = 125; i >= 116; i--) {
-		if (126 - i <= battLevel) {
-			gStatusLine[i + 2] = 0b01111110;
+	for (int i = 125; i >= 116; i--) 
+	{
+		if (126 - i <= battLevel) 
+		{
+			gStatusLine[i + 2] = 0b00111111;
 		}
 	}
-	gStatusLine[117] = 0b01111110;
-	gStatusLine[116] = 0b00011000;
+	gStatusLine[117] = 0b00111111;
+	gStatusLine[116] = 0b00001100;
 
-	sprintf(String, "%s %s %s",
-			cp_freqChangeStepDisp[freqStep],
+	uint8_t stepIndcStart = freqStep == 3 ? 76 : (48 + freqStep * 7);
+	for (int i = 0; i < 6; i ++) 
+	{
+		gStatusLine[i + stepIndcStart] |= 0b01000000;
+		gFrameBuffer[2][i + stepIndcStart] |= 0b00000001;
+	}
+
+	sprintf(String, "%s %s",
 			modulationTypeOptions[modulation],
 			bwNames[bw]);
-	UI_PrintStringSmallest(String, 50, 2, true, true);
+	UI_PrintStringSmallest(String, 75, 0, true, true);
+}
+
+void CP_UI_Menu_DrawMenuList(uint8_t menuSelectIdx)
+{
+	uint8_t offset = Clamp(menuSelectIdx - 2, 0, cp_menuItemNum - 5);
+	for (int i = 0; i < 5; ++i) {
+		const char *s = cp_menuList[i + offset];
+		bool isCurrent = menuSelectIdx == i + offset;
+		if (isCurrent) {
+			UI_PrintStringSmallBold(s, 0, 48, i);
+		} else {
+			UI_PrintStringSmall(s, 0, 48, i);
+		}
+	}
+
+	for (int i = 0; i < 7; i++) {
+		gFrameBuffer[i][49] = 0xFF;
+	}
 }

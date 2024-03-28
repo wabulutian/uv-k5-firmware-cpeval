@@ -11,6 +11,7 @@ static enum_State cp_currentState, cp_previousState;
 static enum_QuickMenuState cp_quickMenuState;
 static uint8_t cp_currentFreqChangeStepIdx = 0;
 const uint16_t cp_freqChangeStep[] = {10000, 1000, 100, 10}; //FM AM USB
+static uint8_t cp_menuSelectIdx = 0;
 
 static uint8_t scanRssi;
 static uint8_t rssiThOffset = 20;
@@ -30,6 +31,8 @@ uint8_t cp_dateTimeInputIndex = 0;
 KEY_Code_t cp_dateTimeInputArr[14];
 uint8_t cp_freqInputIndex = 0;
 KEY_Code_t cp_freqInputArr[8];
+
+st_Time time;
 
 st_CpSettings cp_settings = 
 {
@@ -98,7 +101,7 @@ static void CP_FreqInput() {
 char String[32];
 static void CP_UI_DrawMainInterface()
 {
-	CP_UI_DrawFrequency(cp_RxFreq, cp_TxFreq, cp_settings.currentChannel, cp_currentState == FREQ_INPUT, cp_freqInputString, isTransmitting);
+	CP_UI_DrawFrequency(cp_RxFreq, cp_TxFreq, cp_settings.currentChannel, cp_settings.freqTrackMode, cp_currentState == FREQ_INPUT, cp_freqInputString, isTransmitting);
 	CP_UI_DrawChannelIcon(cp_settings.currentChannel);
 
 	int dbm = Rssi2DBm(scanRssi);	// in measurements.h by @Fagci
@@ -130,8 +133,15 @@ static void CP_UI_DrawMainInterface()
 	UpdateBatteryInfo();
 
 	CP_UI_DrawStatusBar(cp_currentFreqChangeStepIdx, cp_modulationType, listenBw, gBatteryDisplayLevel);
+
+	CP_UI_DrawDateTime(time);
 	ST7565_BlitFullScreen();
 	ST7565_BlitStatusLine();
+}
+
+static void CP_UI_DrawMenuInterface()
+{
+	CP_UI_Menu_DrawMenuList(cp_menuSelectIdx);
 }
 
 #pragma region <<TIM>>
@@ -578,7 +588,7 @@ static void OnKeyDownNormal(KEY_Code_t key)
 		break;
 	case KEY_SIDE1:
 		//TODO
-		//SetState(SAT_MENU);
+		CP_SetState(MENU);
 		break;
 	case KEY_SIDE2:
 		//ToggleBacklight();
@@ -648,6 +658,37 @@ static void OnKeyDownFreqInput(uint8_t key)
 		break;
 	}
 	preventKeyDown = true;
+}
+
+static void OnKeyDownMenu(uint8_t key) 
+{
+	switch (key) 
+	{
+	case KEY_0: break;
+	case KEY_1: break;
+	case KEY_2: break;
+	case KEY_3: break;
+	case KEY_4: break;
+	case KEY_5: break;
+	case KEY_6: break;
+	case KEY_7: break;
+	case KEY_8: break;
+	case KEY_9: break;
+	case KEY_STAR: break;
+	case KEY_EXIT:
+		CP_SetState(cp_previousState);
+		break;
+	case KEY_MENU:
+		break;
+	default:
+		break;
+	}
+	preventKeyDown = true;
+}
+
+static void OnKeyDownSubMenu(uint8_t key) 
+{
+
 }
 
 static void CP_UserInputHandler()
@@ -751,7 +792,8 @@ void CP_APP_RunCoprocessor(void)
 	{
 		memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
 		memset(gStatusLine, 0, sizeof(gStatusLine));
-		CP_UI_DrawMainInterface();
+		if (cp_currentState == MENU) CP_UI_DrawMenuInterface();
+		else CP_UI_DrawMainInterface();
 	}
 	
 }

@@ -26,19 +26,19 @@ static float cosLUT2deg[180] =
 0.529919f, 0.559193f, 0.587785f, 0.615661f, 0.642788f, 0.669131f, 0.694658f, 0.719340f, 0.743145f, 0.766044f, 0.788011f, 0.809017f, 0.829038f, 0.848048f, 0.866025f, 0.882948f, 0.898794f, 0.913545f, 0.927184f, 0.939693f, 0.951057f, 0.961262f, 0.970296f, 0.978148f, 0.984808f, 0.990268f, 0.994522f, 0.997564f, 0.999391f};
 
 #define QUICKMENU_CELL_WIDTH		40
-#define RADAR_CENTER_X				100
-#define RADAR_CENTER_Y				38	
+#define RADAR_CENTER_X				104
+#define RADAR_CENTER_Y				40	
 #define RSSI_METER_PADDING_LEFT		45
 
 void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill);
 void UI_DrawCircle(int centerx, int centery, int radius);
 void CP_UI_DrawEmptyRadar(void);
 void CP_UI_DrawRadar(st_PassInfo pass);
-void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, bool isFreqInputMode, char* p_freqInputString, bool isTx);
+void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, enum_FrequencyTrackMode mode, bool isFreqInputMode, char* p_freqInputString, bool isTx);
 void CP_UI_DrawQuickMenu(char* item1, char* item2, char* item3, uint8_t sel, bool enable);
 void CP_UI_DrawRssi(int dbm, uint8_t s, double enable);
 void CP_UI_DrawChannelIcon(enum_FreqChannel currentChannel);
 void CP_UI_DrawDateTime(st_Time time);
 void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw, uint8_t battLevel);
-
+void CP_UI_Menu_DrawMenuList(uint8_t menuSelectIdx);
 #endif

@@ -708,7 +708,8 @@ static void OnKeyDownNormal(KEY_Code_t key)
 		break;
 	case KEY_MENU:
 		preventKeyDown = true;
-		CP_SetState(MENU);
+		if (cp_quickMenuState != MENU_NONE) cp_quickMenuState = MENU_NONE;
+		else CP_SetState(MENU);
 		break;
 	case KEY_EXIT:
 		preventKeyDown = true;

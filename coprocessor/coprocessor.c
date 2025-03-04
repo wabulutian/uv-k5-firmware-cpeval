@@ -1,5 +1,6 @@
 #include "coprocessor/coprocessor.h"
 
+// Original vars
 static bool isInitialized;
 static bool preventKeyDown;
 static bool isListening;
@@ -14,50 +15,45 @@ static enum_State cp_currentState, cp_previousState;
 static enum_QuickMenuState cp_quickMenuState;
 static uint8_t cp_currentFreqChangeStepIdx = 0;
 const uint16_t cp_freqChangeStep[] = {10000, 1000, 100, 10};
-
-
 static uint8_t scanRssi;
-
-static uint8_t txRestoreTime = 2;
-static uint8_t tickCnt = 0;
-
 static KEY_Code_t btn;
 static uint8_t btnPrev;
 static uint8_t btnDownCounter;
-
+static uint8_t txRestoreTime = 2;
 static uint32_t cp_tempFreq;
 static uint8_t cp_freqInputIndex = 0;
 static KEY_Code_t cp_freqInputArr[8];
 static char cp_freqInputString[13] = "---.--- --0\0";
 
-static st_satStatusMsgPack satLiveList[10];
-static st_satPredict120min_2min focusedSatPred;
-static char satNameList[10][11];
-st_time24MsgPack localTime;
-static st_siteInfoMsgPack siteInfo;
-static char gnrmc[75];
+
+static uint8_t tickCnt = 0;			// for time slicing
+static st_satStatusMsgPack satLiveList[10];	// sat real-time status
+static st_satPredict120min_2min focusedSatPred;	// predicting sat info
+static char satNameList[10][11];	// just name, just for menu display, no other calculate-related use
+st_time24MsgPack localTime;			// time and timezone, just for display, no other calculate-related use
+static st_siteInfoMsgPack siteInfo;	// just for display, no other calculate-related use
+static char gnrmc[75];				// gnss message, just for looks, makes GNSS INFO interface more NiuBi
 static uint8_t gnssFixed = 0;
-static int8_t tzSet = 0;
-static enum_SubMenu cp_subMenuState = GNSS;
-static int8_t cp_subMenuSelectIdx = 0;
-static uint8_t cp_satDataRequestSlice = 0;
-static bool cp_requestAllSatData = false;
-static bool cp_i2cReqSetTz = false;
+static int8_t tzSet = 0;			// Time zone setting value, used to send time zone setting cmd to cp
+uint8_t cp_menuSelectIdx = 0;
+static enum_SubMenu cp_subMenuState = GNSS;	// Currently selected submenu
+static int8_t cp_subMenuSelectIdx = 0;		// as above, but for display in mainmenu inteface
+static uint8_t cp_satDataRequestSlice = 0;	// Reading all the data at once will choke the MCU, so read only one at a time
+static bool cp_requestAllSatData = false;	// read other real-time data while reading the predicted data, the MCU will choke to death
+static bool cp_i2cReqSetTz = false;	
 static uint8_t cp_i2cReqNewTle = 0;
 static bool cp_i2cReqAddSat = false;
 static bool cp_i2cReqDelSat = false;
-static bool cp_listenUartData = false;
-static uint8_t cp_tleDisplayLine = 0;
-static bool cp_tleValid = false;
-static bool cp_isTleDeleteMode = false;
-static char cp_tle_line[5][71];
-static bool dopplerTuneReq = false;
-uint8_t cp_menuSelectIdx = 0;
-
+static bool cp_listenUartData = false;		// Monitoring uart will use a lot of computing power
+static uint8_t cp_tleDisplayLine = 0;		// using smallest font, 128/4 = 32 chars per line -> 1 TLE line = 3 LCD lines. The displayed line needs to be switched by key
+static bool cp_tleValid = false;			// Is last send tle valid
+static bool cp_isTleDeleteMode = false;		// Import New TLE or Clear existing sat slot
+static char cp_tle_line[5][71];				// Last send tle string, only for display
+static bool dopplerTuneReq = false;			// Tune freq every 5 sec while doppler enabled
+static uint8_t dopplerTuneTick = 0;
 static bool cp_enableDoppler = false;
 static uint8_t cp_selectedSatIdx = 0;
-static un_Freq dopplerBackup = {0};
-static uint8_t dopplerTuneTick = 0;
+static un_Freq dopplerBackup = {0};			// Backup freq before enter doppler mode
 
 st_CpSettings cp_settings = 
 {
@@ -137,8 +133,8 @@ static void CP_UI_DrawMainInterface()
 	CP_UI_DrawFrequency(mainFreq.data.down, mainFreq.data.up, cp_settings.currentChannel, cp_settings.freqTrackMode, cp_currentState == FREQ_INPUT, cp_freqInputString, isTransmitting);
 	CP_UI_DrawChannelIcon(cp_settings.currentChannel);
 
-	int dbm = Rssi2DBm(scanRssi);	// in measurements.h by @Fagci
-	uint8_t s = DBm2S(dbm);			// in measurements.h by @Fagci
+	int dbm = Rssi2DBm(scanRssi);
+	uint8_t s = DBm2S(dbm);
 	CP_UI_DrawRssi(dbm, s, !isTransmitting);
 
 	if (cp_modulationType == MOD_FM)
@@ -248,6 +244,7 @@ static void CP_TIM_Init()
 {
 	// Enable TIMB0 and interrupt
 	// See DP32G030 user manual for reg def
+	// Callback function in start.s
 	NVIC_EnableIRQ(DP32_TIMER_BASE0_IRQn);
 	(*(uint32_t*)(0x40064000U + 0x04U)) = 47U;
 	(*(uint32_t*)(0x40064000U + 0x20U)) = 9999U;	// 10ms timer for normal app but idk it's accuary or not. Whatever it looks fine
@@ -268,6 +265,7 @@ static void CP_TIM_DeInit()
 #pragma region <<BK4819>>
 /**
  * BK4819 Operations From @Fagci
+ * Idk why&how to set these params, so just CtrlCV
 */
 static bool audioState = true;
 static uint8_t scanRssi;
@@ -405,7 +403,7 @@ static void ToggleTX(bool on) {
 	BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2, !on);
   	BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1, on);
 }
-
+// idk why these regs should be backuped, just CtrlCV
 static void BackupRegisters() {
   for (uint8_t i = 0; i < ARRAY_SIZE(registersToBackup); ++i) {
     uint8_t regNum = registersToBackup[i];
@@ -957,24 +955,30 @@ static void Tick20ms()
 
 static void Tick200ms()
 {
-	Measure();
-	CP_I2C_Write(0x0012, &cp_enableDoppler, 1);
-	CP_I2C_Write(0x0013, &cp_selectedSatIdx, 1);
+	Measure();	// measure rssi
+	// Send cmd to cp
+	CP_I2C_Write(0x0012, &cp_enableDoppler, 1);		// is doppler(focused) mode
+	CP_I2C_Write(0x0013, &cp_selectedSatIdx, 1);	// current focused sat idx
+
+	// set timezone cmd
 	if (cp_i2cReqSetTz)
 	{
 		CP_I2C_Write(0x0080, &tzSet, 1);
 		cp_i2cReqSetTz = false;
 	}
+	// let cp convert last valid tle to sgp param and set the corresponding slot valid
 	if (cp_i2cReqAddSat)
 	{
 		CP_I2C_Write(0x0010, &cp_subMenuSelectIdx, 1);
 		cp_i2cReqAddSat = false;
 	}
+	// delete the slot
 	if (cp_i2cReqDelSat)
 	{
 		CP_I2C_Write(0x0011, &cp_subMenuSelectIdx, 1);
 		cp_i2cReqDelSat = false;
 	}
+	// uart to i2c passthrough, for tle import
 	if (cp_listenUartData) 
 	{
 		// Check RXTO bit to confirm whether UART is idle
@@ -986,21 +990,25 @@ static void Tick200ms()
 			SProto_UART_to_I2C_Passthrough();
 		}
 	}
+	// Read data from cp
 	CP_I2C_Read(0x0000, &siteInfo, 18);
 	CP_I2C_Read(0x0001, &localTime, 8);
 	CP_I2C_Read(0x0003, gnrmc, 75);
 	CP_I2C_Read(0x0004, &gnssFixed, 1);
 	CP_I2C_Read(0x0083, &cp_tleValid, 1);
 
+	// current focused sat info with predict data
 	if (cp_enableDoppler)
 	{
 		CP_I2C_Read(0x0200 + cp_selectedSatIdx, &focusedSatPred, 124);
 	}
+	// read tle strings to evaluate the passthrough situation
 	if (cp_currentState == SUBMENU && cp_subMenuState == IMPORT_TLE && cp_i2cReqNewTle == 1)
 	{
 		CP_I2C_Read(0x0082, cp_tle_line, 5*71);
 		cp_i2cReqNewTle = 2;
 	}
+	// not in doppler(focused) mode, update all valid sat real-time data in queue
 	if (cp_requestAllSatData)
 	{
 		memset(satLiveList[cp_satDataRequestSlice].name, 0, 11);
@@ -1093,12 +1101,11 @@ void CP_APP_RunCoprocessor(void)
 	SYSTEM_DelayMs(200);
 	memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
 	memset(gStatusLine, 0, sizeof(gStatusLine));
-	// sprintf(String, "ADDR 0001020304050607 TEXT");
-	// UI_PrintStringSmallest(String, 0, 0, true, true);
 	ST7565_BlitStatusLine();
 	preventKeyDown = false;
 	while (isInitialized)
 	{
+		// Update UI display
 		memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
 		memset(gStatusLine, 0, sizeof(gStatusLine));
 		if (cp_currentState == MENU)
@@ -1117,6 +1124,7 @@ void CP_APP_RunCoprocessor(void)
 			CP_UI_DrawMainInterface();
 		}
 
+		// Read last TLE string
 		if (!cp_tleValid)
 		{
 			cp_i2cReqNewTle = 0;
@@ -1125,6 +1133,10 @@ void CP_APP_RunCoprocessor(void)
 		{
 			cp_i2cReqNewTle = 1;
 		}
+
+		// Doppler freq cal and tune
+		// Backup original freq before enter doppler mode
+		// And restore them after exit doppler mode
 		if (!cp_enableDoppler)
 		{
 			if (isFreqBackup)
@@ -1143,24 +1155,30 @@ void CP_APP_RunCoprocessor(void)
 			isFreqBackup = true;
 		}
 
+		// Change freq while not Tx
 		if (cp_enableDoppler && !isTransmitting)
 		{
+			// FM mode, focus on central freq
 			if (cp_settings.freqTrackMode == FREQTRACK_FM)
 			{
 				mainFreq.data.up = (satLiveList[cp_selectedSatIdx].uplinkFreq + satLiveList[cp_selectedSatIdx].uplinkDoppler) / 10;
 				mainFreq.data.down = (satLiveList[cp_selectedSatIdx].downlinkFreq - satLiveList[cp_selectedSatIdx].downlinkDoppler) / 10;
 			}
+			// Linear mode
 			else if(cp_settings.freqTrackMode == FREQTRACK_LINEAR)
 			{
 				uint32_t uplinkCenter = (satLiveList[cp_selectedSatIdx].uplinkFreq + satLiveList[cp_selectedSatIdx].uplinkDoppler) / 10;
 				uint32_t downlinkCenter = (satLiveList[cp_selectedSatIdx].downlinkFreq - satLiveList[cp_selectedSatIdx].downlinkDoppler) / 10;
 				int32_t diff;
+				// Change Tx freq manually and Rx freq auto calculated 
 				if (cp_settings.currentChannel == CH_TXMASTER)
 				{
 					diff = mainFreq.data.up - uplinkCenter;
+					// Normal or inverse(RS44 is inverse)
 					if (cp_settings.transponderType == NORMAL) mainFreq.data.down = downlinkCenter + diff;
 					else mainFreq.data.down = downlinkCenter - diff;
 				}
+				// Change Rx freq manually and Tx freq auto calculated 
 				else if (cp_settings.currentChannel == CH_RXMASTER)
 				{
 					diff = mainFreq.data.down - downlinkCenter;
@@ -1168,6 +1186,8 @@ void CP_APP_RunCoprocessor(void)
 					else mainFreq.data.up = uplinkCenter - diff;
 				}
 			}
+			// Change freq by pressing key -> tune to new freq immediately
+			// Don't wait for the 5 second auto-update interval
 			if (dopplerTuneReq)
 			{
 				BK4819_TuneTo(mainFreq.data.down);

@@ -29,28 +29,48 @@ const static uint32_t F_MAX = 130000000;
 #define CP_I2C_SIZE_SAT_INFO			89
 #define CP_I2C_SIZE_PASS_INFO			362
 
-typedef struct
-{
-	uint16_t year;
-	uint8_t month;
-	uint8_t day;
-	uint8_t hour;
-	uint8_t min;
-	uint8_t sec;
-	int8_t zone;
-	long long tv;
-}st_Time;
+#define CP_MENU_ITEM_NUMBER				3
 
 typedef struct
 {
-	int32_t lon;
-	int32_t lat;
-}st_Site;
-typedef union
+	uint8_t	hh;		//2
+	uint8_t mm;		//2
+	uint8_t ss;		//2
+	int8_t tz;		//2
+}st_time24MsgPack;
+
+typedef struct
 {
-	st_Site data;
-	uint8_t array[8];
-}un_Site;
+	uint16_t siteLat_Deg;
+	uint16_t siteLon_Deg;
+	uint16_t siteLat_0_001Deg;
+	uint16_t siteLon_0_001Deg;
+	char NS;
+	char EW;
+	char siteMaidenhead[8];
+}st_siteInfoMsgPack;
+
+typedef struct
+{
+	char name[11];						//11
+	uint8_t valid;						//1
+	uint32_t  	downlinkFreq;	//4
+	uint32_t  	uplinkFreq;		//4
+	int16_t satAz_1Deg;			//2
+	int16_t satEl_1Deg;			//2
+	int16_t satSpd_1mps;			//2
+	int16_t downlinkDoppler;	//2
+	int16_t	uplinkDoppler;		//2
+}st_satStatusMsgPack;	//30
+
+typedef struct
+{
+	uint8_t az_2Deg[60];
+	int8_t	el_2Deg[60];
+	uint16_t nextEvent_sec;
+	uint8_t nextEvent_mm;
+	uint8_t nextEvent_ss;
+}st_satPredict120min_2min;//124
 
 typedef struct
 {
@@ -63,55 +83,6 @@ typedef union
 	uint8_t array[8];
 }un_Freq;
 
-typedef struct
-{
-	char	l1[71];
-	char	l2[71];
-	char	l3[71];
-}st_tle;
-typedef union
-{
-	st_tle lines;
-	char tle[71*3];
-}un_tle;
-
-
-typedef struct
-{
-	char 		name[71];
-	uint8_t		valid;
-	int16_t		currentAz;
-	int16_t		currentEl;
-	int16_t   	currentSpd;
-	uint16_t   	rfu;
-	uint32_t  	downlinkFreq;
-	uint32_t  	uplinkFreq;
-	uint8_t		chk;
-}st_SatInfo;
-typedef union
-{
-	st_SatInfo data;
-	uint8_t array[89];
-}un_SatInfo;
-
-typedef struct
-{
-	int16_t  	azimuth;
-	int16_t   elevation;
-}st_AzEl10;
-
-typedef struct
-{
-	uint8_t			active;
-	uint8_t			aosMin;
-	st_AzEl10  	azElList[90];
-}st_PassInfo;
-typedef union
-{
-	st_PassInfo data;
-	uint8_t array[362];
-}un_PassInfo;
-
 typedef enum {
 	CH_RX,
 	CH_TX,
@@ -123,13 +94,20 @@ typedef enum {
 	NORMAL,
 	FREQ_INPUT,
 	MENU,
+	SUBMENU,
 	MESSAGE
 }enum_State;
 
 typedef enum {
+	GNSS,
+	SAT_INFO,
+	IMPORT_TLE
+}enum_SubMenu;
+
+typedef enum {
 	FREQTRACK_OFF,
-	FREQTRACK_FULLAUTO,
-	FREQTRACK_SEMIAUTO
+	FREQTRACK_FM,
+	FREQTRACK_LINEAR
 }enum_FrequencyTrackMode;
 
 typedef enum {
@@ -145,28 +123,11 @@ typedef enum {
 typedef struct
 {
 	enum_FreqChannel		currentChannel;
-	enum_FrequencyTrackMode	freqTrackMode;
-	enum_TransponderType	transponderType;
 	enum_TxMode				txMode;
 	uint8_t					ctcssToneIdx;
-}st_CPSettings;
-
-typedef struct
-{
-	uint8_t 	chkbit;
-	int8_t		bk4819TuneFreqOffset;
-	uint8_t		CPStroageNum;
-	uint8_t		rfu1;
-	uint8_t		rfu2;
-	uint8_t		rfu3;
-	uint8_t		rfu4;
-	uint8_t		rfu5;
-}st_CPParams;
-typedef union
-{
-	st_CPParams 	data;
-	uint8_t				arr[8];
-}un_CPParams;
+    enum_TransponderType	transponderType;
+	enum_FrequencyTrackMode	freqTrackMode;
+}st_CpSettings;
 
 typedef enum {
 	MENU_NONE,

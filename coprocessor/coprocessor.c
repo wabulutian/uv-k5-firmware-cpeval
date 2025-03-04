@@ -14,11 +14,9 @@ static enum_State cp_currentState, cp_previousState;
 static enum_QuickMenuState cp_quickMenuState;
 static uint8_t cp_currentFreqChangeStepIdx = 0;
 const uint16_t cp_freqChangeStep[] = {10000, 1000, 100, 10};
-static uint8_t cp_menuSelectIdx = 0;
+
 
 static uint8_t scanRssi;
-static uint8_t rssiThOffset = 20;
-static uint8_t rssiTh = 0;
 
 static uint8_t txRestoreTime = 2;
 static uint8_t tickCnt = 0;
@@ -28,33 +26,38 @@ static uint8_t btnPrev;
 static uint8_t btnDownCounter;
 
 static uint32_t cp_tempFreq;
-char cp_dateTimeInputString[15] = "-------------\0"; // YYYYMMDDhhmmss\0
-char cp_freqInputString[12] = "---.--- --0\0";
-uint8_t cp_dateTimeInputIndex = 0;
-KEY_Code_t cp_dateTimeInputArr[14];
-uint8_t cp_freqInputIndex = 0;
-KEY_Code_t cp_freqInputArr[8];
+static uint8_t cp_freqInputIndex = 0;
+static KEY_Code_t cp_freqInputArr[8];
+static char cp_freqInputString[13] = "---.--- --0\0";
 
-static bool isSatpassEnable = false;
-static st_Time dateTime = {0};
-static un_Site site = {0};
-static un_tle tleTmp = {0};
-static un_Freq freqTmp = {0};
-static un_SatInfo satInfoTmp;
-static un_SatInfo satList[5] = {0};
-#ifdef ENABLE_PASS
-static un_PassInfo passInfo = {0};
-static un_PassInfo passInfo_local = {0};
-static uint8_t passInfoReadCD = 0;
-static uint8_t satInfoReadIdx = 0;
-#endif
-static int8_t selectedSat = 0;
-static uint8_t radarMode = 0;
-static un_Freq dopplerOriginal = {0};
+static st_satStatusMsgPack satLiveList[10];
+static st_satPredict120min_2min focusedSatPred;
+static char satNameList[10][11];
+st_time24MsgPack localTime;
+static st_siteInfoMsgPack siteInfo;
+static char gnrmc[75];
+static uint8_t gnssFixed = 0;
+static int8_t tzSet = 0;
+static enum_SubMenu cp_subMenuState = GNSS;
+static int8_t cp_subMenuSelectIdx = 0;
+static uint8_t cp_satDataRequestSlice = 0;
+static bool cp_requestAllSatData = false;
+static bool cp_i2cReqSetTz = false;
+static uint8_t cp_i2cReqNewTle = 0;
+static bool cp_i2cReqAddSat = false;
+static bool cp_i2cReqDelSat = false;
+static bool cp_listenUartData = false;
+static uint8_t cp_tleDisplayLine = 0;
+static bool cp_tleValid = false;
+static bool cp_isTleDeleteMode = false;
+static char cp_tle_line[5][71];
+static bool dopplerTuneReq = false;
+uint8_t cp_menuSelectIdx = 0;
+
+static bool cp_enableDoppler = false;
+static uint8_t cp_selectedSatIdx = 0;
 static un_Freq dopplerBackup = {0};
 static uint8_t dopplerTuneTick = 0;
-
-static char configBuf[256] = {0};
 
 st_CpSettings cp_settings = 
 {
@@ -65,16 +68,19 @@ st_CpSettings cp_settings =
     .transponderType = TRANSPONDER_NORMAL,
 };
 
-const char* cp_freqTrackModeOptionDisp[] = {"OFF", "FULL", "SEMI"};
+const char* cp_freqTrackModeOptionDisp[] = {"OFF", "FM", "LINE"};
 const char* cp_transponderTypeOptionDisp[] = {"NORMAL", "INVERSE"};
+const char* cp_menuItemList[CP_MENU_ITEM_NUMBER] = {"GNSS", "SAT", "TLE"};
+const uint8_t cp_subMenuItemNumList[CP_MENU_ITEM_NUMBER] = {0, 10, 10};
 
 #pragma region <<Utils>>
 
 static bool IsFreqLegal(uint32_t f)
 {
-	if (f > 13000000 && f < 15000000) return true;
-	if (f > 40000000 && f < 50000000) return true;
-	return false;
+	// if (f > 13000000 && f < 15000000) return true;
+	// if (f > 40000000 && f < 50000000) return true;
+	// return false;
+	return true;
 }
 
 
@@ -121,18 +127,6 @@ static void CP_FreqInput() {
 	CP_SetState(FREQ_INPUT);
 }
 
-static void CP_GetDopplerFreq(st_Freq original, st_Freq* result, int16_t speed_100mPs) 
-{
-	if (speed_100mPs > 100 || speed_100mPs < -100) return;
-
-    int32_t diffUp = ((int32_t)original.up / 2997924 * speed_100mPs); //cc in 100m/s
-	result->up = original.up + (int32_t)diffUp;
-
-    int32_t diffDn =  ((int32_t)original.down / 2997924 * speed_100mPs);
-	diffDn *= -1;
-	result->down = original.down + (int32_t)diffDn;
-}
-
 #pragma endregion
 
 #pragma region <<UI Drawing>>
@@ -144,8 +138,6 @@ static void CP_UI_DrawMainInterface()
 	CP_UI_DrawChannelIcon(cp_settings.currentChannel);
 
 	int dbm = Rssi2DBm(scanRssi);	// in measurements.h by @Fagci
-	int baseDbm = abs(Rssi2DBm(rssiTh));	// in measurements.h by @Fagci
-	int offsetDbm = rssiThOffset >> 1;
 	uint8_t s = DBm2S(dbm);			// in measurements.h by @Fagci
 	CP_UI_DrawRssi(dbm, s, !isTransmitting);
 
@@ -161,26 +153,30 @@ static void CP_UI_DrawMainInterface()
 			sprintf(String, "CTCSS");
 		}
 	}
+	else
+	{
+		sprintf(String, "-----");
+	}
 	CP_UI_DrawQuickMenu(cp_freqTrackModeOptionDisp[cp_settings.freqTrackMode],
 						cp_transponderTypeOptionDisp[cp_settings.transponderType],	
 						String,
 						cp_quickMenuState);
 
-	if(isSatpassEnable)
+	if (!cp_enableDoppler) CP_UI_DrawEmptyRadar();
+	else
 	{
-#ifdef ENABLE_PASS
-		CP_UI_DrawRadar(&satList, selectedSat, passInfo_local.data, 2);
-		CP_UI_DrawSatInfo(satList[selectedSat].data, passInfo_local.data);
-#else
-		CP_UI_DrawRadar(&satList, selectedSat, 2);
-		CP_UI_DrawSatInfo(satList[selectedSat].data);
-#endif
+		UI_PrintStringSmallest(satLiveList[cp_selectedSatIdx].name, 34, 4 * 8 + 1, false, true);
+		sprintf(String, "A:%03d E:%03d", 
+			satLiveList[cp_selectedSatIdx].satAz_1Deg, 
+			satLiveList[cp_selectedSatIdx].satEl_1Deg);
+		UI_PrintStringSmallest(String, 34, 5 * 8 + 1, false, true);
+		sprintf(String, "%03d:%02d",  focusedSatPred.nextEvent_mm, focusedSatPred.nextEvent_ss);
+		UI_PrintStringSmallest(String, 34, 6 * 8 + 1, false, true);
+		CP_UI_DrawRadar(&satLiveList, cp_selectedSatIdx, focusedSatPred, cp_enableDoppler ? SINGLE_WITH_PREDICT : SINGLE);
 	}
-	else CP_UI_DrawEmptyRadar();
 
 	UpdateBatteryInfo();
-
-	CP_UI_DrawStatusBar(cp_currentFreqChangeStepIdx, cp_modulationType, listenBw, gBatteryDisplayLevel, dateTime);
+	CP_UI_DrawStatusBarInMainScreen(localTime, gBatteryDisplayLevel, gnssFixed, cp_currentFreqChangeStepIdx, cp_modulationType, listenBw);
 
 	ST7565_BlitFullScreen();
 	ST7565_BlitStatusLine();
@@ -190,161 +186,59 @@ static void CP_UI_DrawMenuInterface()
 {
 	UpdateBatteryInfo();
 
-	CP_UI_DrawStatusBar(99, cp_modulationType, listenBw, gBatteryDisplayLevel, dateTime);
-	CP_UI_Menu_DrawSatList(cp_menuSelectIdx, satList, isSatpassEnable, selectedSat + 1);
-	if(cp_menuSelectIdx != 0)
+	CP_UI_DrawStatusBarInMenu(localTime, gBatteryDisplayLevel, gnssFixed);
+	CP_UI_Menu_DrawMenuList("MAIN MENU", cp_menuSelectIdx, cp_menuItemList, CP_MENU_ITEM_NUMBER);
+	switch (cp_menuSelectIdx)
 	{
-#ifdef ENABLE_PASS
-		CP_UI_Menu_DrawSatInfo(satList[cp_menuSelectIdx - 1].data, passInfo_local.data);
-		CP_UI_DrawRadar(&satList, cp_menuSelectIdx - 1, passInfo_local.data, 2);
-#else
-		CP_UI_Menu_DrawSatInfo(satList[cp_menuSelectIdx - 1].data);
-		CP_UI_DrawRadar(&satList, cp_menuSelectIdx - 1, 1);
-#endif
+	case GNSS:
+		CP_UI_SubMenu_DrawGnssInfo(&localTime, &siteInfo, gnssFixed);
+		break;
+	case SAT_INFO:
+		sprintf(String, "Valid Sat:%02d", CP_UI_DrawRadar(&satLiveList, cp_subMenuSelectIdx, focusedSatPred, ALL));
+		UI_PrintStringSmallest(String, 78, 8, false, true);
+		break;
+	case IMPORT_TLE:
+		break;
+	default:
+		break;
 	}
-	else CP_UI_DrawRadar(&satList, 0, 3);
 
 	ST7565_BlitFullScreen();
 	ST7565_BlitStatusLine();
 }
 
+static void CP_UI_DrawSubMenuInterface()
+{
+	UpdateBatteryInfo();
+	CP_UI_DrawStatusBarInMenu(localTime, gBatteryDisplayLevel, gnssFixed);
+	
+	switch (cp_subMenuState)
+	{
+	case GNSS:
+		CP_UI_SubMenu_DrawGnssInfo_Detail(&localTime, &siteInfo, gnrmc, tzSet, gnssFixed);
+		break;
+	case SAT_INFO:
+		CP_UI_DrawRadar(&satLiveList, cp_subMenuSelectIdx, focusedSatPred, cp_enableDoppler ? SINGLE_WITH_PREDICT : SINGLE);
+		CP_UI_SubMenu_DrawSingleSatInfo(&satLiveList, cp_subMenuSelectIdx);
+		CP_UI_Menu_DrawSatList("SAT LIVE", &satLiveList, cp_subMenuSelectIdx, cp_enableDoppler, cp_selectedSatIdx);
+		break;
+	case IMPORT_TLE:
+		CP_UI_SubMenu_DrawTleInfo(cp_tle_line[cp_tleDisplayLine], cp_subMenuSelectIdx, cp_tleValid, cp_isTleDeleteMode);
+		break;
+	default:
+		break;
+	}
+	
+
+	ST7565_BlitFullScreen();
+	ST7565_BlitStatusLine();
+}
+
+
 #pragma endregion
 
 #pragma region <<TLE>>
 
-static void CP_ConvertDateTime(char* input, uint16_t* year, uint8_t* month, uint8_t* day,
-                 uint8_t* hour, uint8_t* min, uint8_t* sec, int8_t* zone)
-{
-	char* p = input;
-	int sign = 1;
-
-	// DATETIME
-	*year = (*p - '0') * 1000 + (*(p+1) - '0') * 100 + (*(p+2) - '0') * 10 + (*(p+3) - '0');
-	p += 4;
-	*month = (*p - '0') * 10 + (*(p+1) - '0');
-	p += 2;
-	*day = (*p - '0') * 10 + (*(p+1) - '0');
-	p += 2;
-	*hour = (*p - '0') * 10 + (*(p+1) - '0');
-	p += 2;
-	*min = (*p - '0') * 10 + (*(p+1) - '0');
-	p += 2;
-	*sec = (*p - '0') * 10 + (*(p+1) - '0');
-	p += 2;
-	if (*p == '-') {
-		sign = -1;
-		p++;
-	} else if (*p == '+') {
-		p++;
-	}
-	*zone = (*p - '0') * 10 + (*(p+1) - '0');
-	*zone *= sign;
-	p += 2;
-	while (*p != '\n')
-	{
-		p++;
-	}
-}
-
-static void CP_ConvertStie(char* input, int32_t* lon10k, int32_t* lat10k)
-{
-	char* p = input;
-
-	// LONLAT
-	*lon10k = 0;
-	*lat10k = 0;
-	int sign = 1;
-	if (*p == '-') {
-		sign = -1;
-		p++;
-	} else if (*p == '+') {
-		p++;
-	}
-	for (int i = 0; i < 3; i++) 
-	{
-		*lon10k = *lon10k * 10 + (*p++ - '0');
-	}
-	p++; // skip '.'
-	for (int i = 0; i < 4; i++) 
-	{
-		*lon10k = *lon10k * 10 + (*p++ - '0');
-	}
-	*lon10k *= sign;
-
-	p++; // skip space
-	sign = 1;
-	if (*p == '-') {
-		sign = -1;
-		p++;
-	} else if (*p == '+') {
-		p++;
-	}
-	for (int i = 0; i < 3; i++) 
-	{
-		*lat10k = *lat10k * 10 + (*p++ - '0');
-	}
-	p++; // skip '.'
-	for (int i = 0; i < 4; i++) 
-	{
-		*lat10k = *lat10k * 10 + (*p++ - '0');
-	}
-	*lat10k *= sign;
-}
-
-static void CP_ConvertFreq(char* input, uint32_t* up, uint32_t* down)
-{
-	char* p = input;
-
-	*up = 0;
-	*down = 0;
-	for (int i = 0; i < 6; i++) 
-	{
-		*up = *up * 10 + (*p++ - '0');
-	}
-
-	p++; // skip space
-	for (int i = 0; i < 6; i++) 
-	{
-		*down = *down * 10 + (*p++ - '0');
-	}
-	*up *= 100;
-	*down *= 100;
-}
-
-static void CP_ConvertTLE(char* input, char* l1, char* l2, char* l3) 
-{
-	// SAT NAME
-	char* p = input;
-	char* q = l1;
-	while (*p >= ' ' && *p <= 'z')
-	{
-		*q++ = *p++;
-	}
-	*q = '\0';
-	while (!(*p >= ' ' && *p <= 'z'))
-	{
-		p++;
-	}
-
-	// TLE
-	q = l2;
-	while (*p >= ' ' && *p <= 'z')
-	{
-		*q++ = *p++;
-	}
-	*q = '\0';
-	while (!(*p >= ' ' && *p <= 'z'))
-	{
-		p++;
-	}
-
-	q = l3;
-	while (*p >= ' ' && *p <= 'z')
-	{
-		*q++ = *p++;
-	}
-	*q = '\0';
-}
 
 #pragma endregion
 
@@ -561,11 +455,11 @@ static void CP_SetFreq(uint32_t f)
 		mainFreq.data.up = f;
 	}
 
-	if (cp_settings.currentChannel == CH_RXMASTER) 
+	if (cp_settings.currentChannel == CH_RXMASTER && cp_settings.freqTrackMode == FREQTRACK_OFF) 
 	{
 		mainFreq.data.up = f;
 	}
-	else if (cp_settings.currentChannel == CH_TXMASTER) 
+	else if (cp_settings.currentChannel == CH_TXMASTER && cp_settings.freqTrackMode == FREQTRACK_OFF) 
 	{
 		BK4819_TuneTo(f);
 		mainFreq.data.down = f;
@@ -592,15 +486,17 @@ static void UpdateCurrentFreqNormal(bool inc) {
 		mainFreq.data.up = f;
 	}
 
-	if (cp_settings.currentChannel == CH_RXMASTER) 
+	if (cp_settings.currentChannel == CH_RXMASTER && cp_settings.freqTrackMode == FREQTRACK_OFF) 
 	{
 		mainFreq.data.up = f;
 	}
-	else if (cp_settings.currentChannel == CH_TXMASTER) 
+	else if (cp_settings.currentChannel == CH_TXMASTER && cp_settings.freqTrackMode == FREQTRACK_OFF) 
 	{
 		BK4819_TuneTo(f);
 		mainFreq.data.down = f;
 	}
+
+	if (cp_settings.freqTrackMode != FREQTRACK_OFF) dopplerTuneReq = true;
 }
 
 // Another channel
@@ -631,7 +527,8 @@ static void CP_UpdateFreqInput(KEY_Code_t key) {
 	if (key == KEY_EXIT) {
 		cp_freqInputIndex--;
 	} else if (key <= KEY_9) {
-		cp_freqInputArr[cp_freqInputIndex++] = key;
+		cp_freqInputArr[cp_freqInputIndex] = key;
+		cp_freqInputIndex++;
 	}
 
 	CP_ResetFreqInput();
@@ -688,7 +585,7 @@ static void CP_ToggleQuickMenuValue(enum_QuickMenuState state, bool increase)
 	switch (state) {
 	case MENU_FREQTRACK:
 		cp_settings.freqTrackMode = 
-			cp_settings.freqTrackMode == FREQTRACK_FULLAUTO ? FREQTRACK_OFF : (cp_settings.freqTrackMode + 1);
+			cp_settings.freqTrackMode == FREQTRACK_LINEAR ? FREQTRACK_OFF : (cp_settings.freqTrackMode + 1);
 		break;
 	case MENU_TRANSPONDER:
 		cp_settings.transponderType = 
@@ -703,9 +600,6 @@ static void CP_ToggleQuickMenuValue(enum_QuickMenuState state, bool increase)
 			tmp = tmp % 51;
 			cp_settings.ctcssToneIdx = tmp;
 		}
-		else
-		{
-		}
 		break;
 	default:
 		break;
@@ -716,7 +610,7 @@ static void CP_ToggleQuickMenuValue(enum_QuickMenuState state, bool increase)
 #pragma region <<USER_INPUT>>
 
 /**
- *  Key value reading from @Fagci
+ *  Key value reading functions from @Fagci
 */
 static KEY_Code_t GetKey() {
 	KEY_Code_t btn = KEYBOARD_Poll();
@@ -752,7 +646,7 @@ static void OnKeyDownNormal(KEY_Code_t key)
 		cp_currentFreqChangeStepIdx = cp_currentFreqChangeStepIdx % 4;
 		break;
 	case KEY_5:
-		if (cp_quickMenuState == MENU_NONE && !(isSatpassEnable && cp_settings.freqTrackMode != FREQTRACK_OFF)) CP_FreqInput();
+		if (cp_quickMenuState == MENU_NONE && !(cp_enableDoppler && cp_settings.freqTrackMode == FREQTRACK_FM)) CP_FreqInput();
 		break;
 	case KEY_6:
 		ToggleIFBW();
@@ -769,13 +663,12 @@ static void OnKeyDownNormal(KEY_Code_t key)
 		ToggleModulation();
 		break;
 	case KEY_UP:
-		
 		if (cp_quickMenuState != MENU_NONE) 
 		{
 			CP_ToggleQuickMenuValue(cp_quickMenuState, true);
 			break;
 		}
-		if (!(isSatpassEnable && cp_settings.freqTrackMode != FREQTRACK_OFF)) UpdateCurrentFreqNormal(true);
+		if (!(cp_enableDoppler && cp_settings.freqTrackMode == FREQTRACK_FM)) UpdateCurrentFreqNormal(true);
 		break;
 	case KEY_DOWN:
 		if (cp_quickMenuState != MENU_NONE) 
@@ -783,7 +676,7 @@ static void OnKeyDownNormal(KEY_Code_t key)
 			CP_ToggleQuickMenuValue(cp_quickMenuState, false);
 			break;
 		}
-		if (!(isSatpassEnable && cp_settings.freqTrackMode != FREQTRACK_OFF)) UpdateCurrentFreqNormal(false);
+		if (!(cp_enableDoppler && cp_settings.freqTrackMode == FREQTRACK_FM)) UpdateCurrentFreqNormal(false);
 		break;
 	case KEY_STAR:
 		break;
@@ -807,7 +700,7 @@ static void OnKeyDownNormal(KEY_Code_t key)
 		
 		break;
 	case KEY_SIDE2:
-		//ToggleBacklight();
+		// ToggleBacklight();
 		break;
 	case KEY_PTT:
 		if (!IsFreqLegal(mainFreq.data.up)) break;
@@ -884,31 +777,129 @@ static void OnKeyDownMenu(uint8_t key)
 	case KEY_9: break;
 	case KEY_STAR: break;
 	case KEY_UP:
-		if (cp_menuSelectIdx == 0) cp_menuSelectIdx = 5;
+		if (cp_menuSelectIdx == 0) cp_menuSelectIdx = CP_MENU_ITEM_NUMBER-1;
 		else cp_menuSelectIdx --;
 	break;
 	case KEY_DOWN:
 		cp_menuSelectIdx ++;
-		cp_menuSelectIdx = cp_menuSelectIdx % 6;
+		cp_menuSelectIdx = cp_menuSelectIdx % CP_MENU_ITEM_NUMBER;
 	break;
 	case KEY_EXIT:
-		cp_menuSelectIdx = (selectedSat + 1) * isSatpassEnable;
-		CP_SetState(cp_previousState);
+		CP_SetState(NORMAL);
 		break;
 	case KEY_MENU:
-		if (cp_menuSelectIdx == 0) isSatpassEnable = false;
-		else if (satList[cp_menuSelectIdx - 1].data.valid == 1)
-		{
-			selectedSat = cp_menuSelectIdx - 1;
-			isSatpassEnable = true;
-		}
+		cp_subMenuState = cp_menuSelectIdx;
+		if (cp_subMenuState == GNSS && !cp_enableDoppler) tzSet = localTime.tz;	// dont change tle while doppler enabled
+		else if (cp_subMenuState == IMPORT_TLE) cp_listenUartData = true;
+		CP_SetState(SUBMENU);
 		break;
 	default:
 		break;
 	}
-#ifdef ENABLE_PASS
-	passInfoReadCD = 0;
-#endif
+	preventKeyDown = true;
+}
+
+static void OnKeyDownSubMenu(uint8_t key) 
+{
+	switch (key) 
+	{
+	case KEY_0: break;
+	case KEY_1:
+		cp_tleDisplayLine = 0;
+	break;
+	case KEY_2:
+		cp_tleDisplayLine = 1;
+	break;
+	case KEY_3:
+		cp_tleDisplayLine = 2;
+	break;
+	case KEY_4:
+		cp_tleDisplayLine = 3;
+	break;
+	case KEY_5:
+		cp_tleDisplayLine = 4;
+	break;
+	case KEY_6: break;
+	case KEY_7: break;
+	case KEY_8: break;
+	case KEY_9: break;
+	case KEY_STAR: 
+		if (cp_subMenuState == IMPORT_TLE) 
+		{
+			cp_listenUartData = false;
+			cp_subMenuState = SAT_INFO;
+		}
+		else if (cp_subMenuState == SAT_INFO && !cp_enableDoppler)
+		{
+			cp_listenUartData = true;
+			cp_subMenuState = IMPORT_TLE;
+		}
+	break;
+	case KEY_F:
+		if (cp_subMenuState == IMPORT_TLE) 
+		{
+			cp_isTleDeleteMode = !cp_isTleDeleteMode;
+		}
+	break;
+	case KEY_UP:
+		// cant change selected satellite while doppler enabled
+		if (cp_subMenuState == SAT_INFO && cp_enableDoppler) break;
+		if (cp_subMenuState == GNSS)
+		{
+			tzSet = tzSet == 12 ? -12 : (tzSet + 1);
+		}
+		else
+		{
+			if (cp_subMenuState == IMPORT_TLE) cp_subMenuSelectIdx ++;
+			else  cp_subMenuSelectIdx --;
+			if (cp_subMenuSelectIdx < 0) cp_subMenuSelectIdx = cp_subMenuItemNumList[cp_subMenuState] - 1;
+			cp_subMenuSelectIdx = cp_subMenuSelectIdx % cp_subMenuItemNumList[cp_subMenuState];
+		}
+	break;
+	case KEY_DOWN:
+		// cant change selected satellite while doppler enabled
+		if (cp_subMenuState == SAT_INFO && cp_enableDoppler) break;
+		if (cp_subMenuState == GNSS)
+		{
+			tzSet = tzSet == -12 ? 12 : (tzSet - 1);
+		}
+		else
+		{
+			if (cp_subMenuState == IMPORT_TLE) cp_subMenuSelectIdx --;
+			else  cp_subMenuSelectIdx ++;
+			if (cp_subMenuSelectIdx < 0) cp_subMenuSelectIdx = cp_subMenuItemNumList[cp_subMenuState] - 1;
+			cp_subMenuSelectIdx = cp_subMenuSelectIdx % cp_subMenuItemNumList[cp_subMenuState];
+		}
+	break;
+	case KEY_EXIT:
+		cp_listenUartData = false;
+		CP_SetState(cp_previousState);
+	break;
+	case KEY_MENU:
+		if (cp_subMenuState == GNSS) cp_i2cReqSetTz = true;
+		else if (cp_subMenuState == IMPORT_TLE && (cp_tleValid || cp_isTleDeleteMode))
+		{
+			if (cp_isTleDeleteMode) cp_i2cReqDelSat = true;
+			else cp_i2cReqAddSat = true;
+			cp_listenUartData = false;
+			CP_SetState(cp_previousState);
+		}
+		else if (cp_subMenuState == SAT_INFO)
+		{
+			if (!cp_enableDoppler)
+			{
+				cp_enableDoppler = true;
+				cp_selectedSatIdx = cp_subMenuSelectIdx;
+			}
+			else
+			{
+				cp_enableDoppler = false;
+			}
+		}
+	break;
+	default:
+		break;
+	}
 	preventKeyDown = true;
 }
 
@@ -938,6 +929,9 @@ static void CP_UserInputHandler()
 		case MENU:
 			OnKeyDownMenu(btn);
 			break;
+		case SUBMENU:
+			OnKeyDownSubMenu(btn);
+			break;
 		}
 	}
 	return;
@@ -958,125 +952,84 @@ static void Tick20ms()
 		txRestoreTime --;
 		return;
 	}
+}
+
+static void Tick200ms()
+{
 	Measure();
-}
-
-static void Tick100ms()
-{
-	CP_I2C_RTC(&dateTime, CP_I2C_DIR_READ);
-	int8_t stat;
-	stat = SProto_TLEReader(configBuf, 300);
-	if (stat == 'S')
+	CP_I2C_Write(0x0012, &cp_enableDoppler, 1);
+	CP_I2C_Write(0x0013, &cp_selectedSatIdx, 1);
+	if (cp_i2cReqSetTz)
 	{
-		CP_ConvertStie(configBuf, &site.data.lon, &site.data.lat);
-		printf("Set site: %d, %d\n\r", site.data.lon, site.data.lat);
-		CP_I2C_Site(&site);
-	} else if (stat == 'T')
-	{
-		if (cp_currentState != MENU || cp_menuSelectIdx == 0)
-		{
-			printf("TLE NOT SAVE!\n\rCHOOSE AN VALID SLOT AND TRY AGAIN!\n\r");
-			return;
-		}
-		CP_ConvertTLE(configBuf, tleTmp.lines.l1, tleTmp.lines.l2, tleTmp.lines.l3);
-		printf("Add sat@%d: %s\n\r%s\n\r%s\n\r", cp_menuSelectIdx, tleTmp.lines.l1, tleTmp.lines.l2, tleTmp.lines.l3);
-		CP_I2C_TLE(tleTmp.tle, cp_menuSelectIdx - 1);
-
-		for (int n = 0; n < 20; n ++)
-		{
-			uint8_t idx, sum = 0;
-			idx = n % 5;
-			SYSTEM_DelayMs(5);
-			CP_I2C_SATINFO(&satInfoTmp, idx);
-			for (int i = 0; i < CP_I2C_SIZE_SAT_INFO - 1; i ++)
-			{
-				sum += satInfoTmp.array[i];
-			}
-			if (sum != satInfoTmp.data.chk) n --;
-			memcpy(&satList[idx].array, &satInfoTmp.array, CP_I2C_SIZE_SAT_INFO);
-			printf(".", cp_menuSelectIdx, tleTmp.tle);
-		}
-#ifdef ENABLE_PASS
-		satInfoReadIdx = cp_menuSelectIdx - 1;
-		passInfoReadCD = 0;
-#endif
-	} else if (stat == 'D')
-	{
-		CP_ConvertDateTime(configBuf, &dateTime.year, &dateTime.month, &dateTime.day,
-							&dateTime.hour, &dateTime.min, &dateTime.sec, &dateTime.zone);
-		printf("Set time: %02d%02d%02d%02d%02d%02d %d\n\r", dateTime.year, dateTime.month, dateTime.day,
-		 					dateTime.hour, dateTime.min, dateTime.sec, dateTime.zone);
-		CP_I2C_RTC(&dateTime, CP_I2C_DIR_WRITE);
-	} else if (stat == 'F')
-	{
-		if (cp_currentState != MENU || cp_menuSelectIdx == 0)
-		{
-			printf("FREQ NOT SAVE!\n\rCHOOSE AN VALID SLOT AND TRY AGAIN!\n\r");
-			return;
-		}
-		CP_ConvertFreq(configBuf, &freqTmp.data.up, &freqTmp.data.down);
-		CP_I2C_Freq(&freqTmp, cp_menuSelectIdx - 1);
-	} else 
-	{
-		return;
+		CP_I2C_Write(0x0080, &tzSet, 1);
+		cp_i2cReqSetTz = false;
 	}
-	printf("OK!\n\r");
-}
-
-static void Tick500ms()
-{
-	uint8_t idx, sum = 0;
-
-	if (cp_currentState == MENU) idx = cp_menuSelectIdx - 1;
-	else if(isSatpassEnable) idx = selectedSat;
-	else return;
-
-	CP_I2C_SATINFO(&satInfoTmp, idx);
-	for (int i = 0; i < CP_I2C_SIZE_SAT_INFO - 1; i ++)
+	if (cp_i2cReqAddSat)
 	{
-		sum += satInfoTmp.array[i];
+		CP_I2C_Write(0x0010, &cp_subMenuSelectIdx, 1);
+		cp_i2cReqAddSat = false;
 	}
-	if (sum != satInfoTmp.data.chk) return;
-	memcpy(&satList[idx].array, &satInfoTmp.array, CP_I2C_SIZE_SAT_INFO);
+	if (cp_i2cReqDelSat)
+	{
+		CP_I2C_Write(0x0011, &cp_subMenuSelectIdx, 1);
+		cp_i2cReqDelSat = false;
+	}
+	if (cp_listenUartData) 
+	{
+		// Check RXTO bit to confirm whether UART is idle
+		if (((UART1->IF & UART_IF_RXTO_MASK) >> UART_IF_RXTO_SHIFT) == 0x1)
+		{
+			// Clear RXTO bit
+			UART1->IF |= UART_IF_RXTO_BITS_SET;
+			// Process rx data
+			SProto_UART_to_I2C_Passthrough();
+		}
+	}
+	CP_I2C_Read(0x0000, &siteInfo, 18);
+	CP_I2C_Read(0x0001, &localTime, 8);
+	CP_I2C_Read(0x0003, gnrmc, 75);
+	CP_I2C_Read(0x0004, &gnssFixed, 1);
+	CP_I2C_Read(0x0083, &cp_tleValid, 1);
+
+	if (cp_enableDoppler)
+	{
+		CP_I2C_Read(0x0200 + cp_selectedSatIdx, &focusedSatPred, 124);
+	}
+	if (cp_currentState == SUBMENU && cp_subMenuState == IMPORT_TLE && cp_i2cReqNewTle == 1)
+	{
+		CP_I2C_Read(0x0082, cp_tle_line, 5*71);
+		cp_i2cReqNewTle = 2;
+	}
+	if (cp_requestAllSatData)
+	{
+		memset(satLiveList[cp_satDataRequestSlice].name, 0, 11);
+		CP_I2C_Read(0x0100 + cp_satDataRequestSlice, &satLiveList[cp_satDataRequestSlice], 30);
+		if (satLiveList[cp_satDataRequestSlice].valid) memcpy(satNameList[cp_satDataRequestSlice], satLiveList[cp_satDataRequestSlice].name, 11);
+		else sprintf(satNameList[cp_satDataRequestSlice], "---");
+		cp_satDataRequestSlice += 1;
+		cp_satDataRequestSlice = cp_satDataRequestSlice % 10;
+	}
+	else
+	{
+		memset(satLiveList[cp_subMenuSelectIdx].name, 0, 11);
+		CP_I2C_Read(0x0100 + cp_subMenuSelectIdx, &satLiveList[cp_subMenuSelectIdx], 30);
+		if (satLiveList[cp_subMenuSelectIdx].valid) memcpy(satNameList[cp_subMenuSelectIdx], satLiveList[cp_subMenuSelectIdx].name, 11);
+		else sprintf(satNameList[cp_subMenuSelectIdx], "---");
+	}
 }
 
 static void Tick1s()
 {
-	if (dopplerTuneTick > 0)
+	if (dopplerTuneTick < 5)
 	{
-		dopplerTuneTick -= 1;
+		dopplerTuneTick ++;
 		return;
 	}
-	if (isSatpassEnable && cp_settings.freqTrackMode != FREQTRACK_OFF)
+	else
 	{
+		dopplerTuneTick = 0;
 		BK4819_TuneTo(mainFreq.data.down);
-		dopplerTuneTick = 5;
 	}
-#ifdef ENABLE_PASS
-	if (!passInfoReadCD)
-	{
-		if (cp_currentState == MENU && cp_menuSelectIdx != 0)
-		{	
-			CP_I2C_PASSINFO(&passInfo, cp_menuSelectIdx - 1);
-			memcpy(&passInfo_local, &passInfo, CP_I2C_SIZE_PASS_INFO);
-		}
-		else if(isSatpassEnable)
-		{
-			CP_I2C_PASSINFO(&passInfo, selectedSat);
-			for (int i = 0; i < 60; i ++)
-			{
-				if (passInfo.data.azElList[i].azimuth > 3600) return;
-				if (passInfo.data.azElList[i].azimuth < 0) return;
-				if (passInfo.data.azElList[i].elevation > 900) return;
-				if (passInfo.data.azElList[i].elevation < -900) return;
-				if (passInfo.data.aosMin != 255 && passInfo.data.aosMin > 180) return;
-			}
-			memcpy(&passInfo_local, &passInfo, CP_I2C_SIZE_PASS_INFO);
-		}
-		passInfoReadCD = 1;
-	}
-	passInfoReadCD --;
-#endif
 }
 
 static void CP_APP_BackupProcess()
@@ -1095,13 +1048,6 @@ static void CP_APP_Init()
 	SYSCON_DEV_CLK_GATE = 	SYSCON_DEV_CLK_GATE |
                         	SYSCON_DEV_CLK_GATE_RTC_BITS_ENABLE |
                         	SYSCON_DEV_CLK_GATE_TIMER_BASE0_BITS_ENABLE;
-	
-	// Display some nb console things
-	memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
-	memset(gStatusLine, 0, sizeof(gStatusLine));
-	sprintf(String, "Starting APP");
-	UI_PrintStringSmallest(String, 0, 0, false, true);
-	ST7565_BlitFullScreen();
 
 	// Init local freq
 	if (isFirstBoot)
@@ -1113,38 +1059,6 @@ static void CP_APP_Init()
 		dopplerBackup.data.down = mainFreq.data.down;
 		isFirstBoot = false;
 	}
-
-	sprintf(String, "Reading RTC time");
-	UI_PrintStringSmallest(String, 0, 8, false, true);
-	ST7565_BlitFullScreen();
-	// RTC
-	CP_I2C_RTC(&dateTime, CP_I2C_DIR_READ);
-
-
-	sprintf(String, "Reading satellite list");
-	UI_PrintStringSmallest(String, 0, 16, false, true);
-	ST7565_BlitFullScreen();
-	// Read all satellite
-	sprintf(String, ".");
-	for (int n = 0; n < 20; n ++)
-	{
-		uint8_t idx, sum = 0;
-		idx = n % 10;
-		SYSTEM_DelayMs(5);
-		CP_I2C_SATINFO(&satInfoTmp, idx);
-		for (int i = 0; i < CP_I2C_SIZE_SAT_INFO - 1; i ++)
-		{
-			sum += satInfoTmp.array[i];
-		}
-		if (sum != satInfoTmp.data.chk) n --;
-		memcpy(&satList[idx].array, &satInfoTmp.array, CP_I2C_SIZE_SAT_INFO);
-		UI_PrintStringSmallest(String, n * 5, 24, false, true);
-		ST7565_BlitFullScreen();
-	}
-
-	sprintf(String, "Changing MCU settings");
-	UI_PrintStringSmallest(String, 0, 32, false, true);
-	ST7565_BlitFullScreen();
 	// Set some params
 	cp_currentState = cp_previousState = NORMAL;
 	ToggleRX(true), ToggleRX(false); // hack to prevent noise when squelch off
@@ -1175,14 +1089,42 @@ void CP_APP_RunCoprocessor(void)
 	CP_UART_Init();
 	isInitialized = true;
 	preventKeyDown = true;
+	SYSTEM_DelayMs(200);
+	memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
+	memset(gStatusLine, 0, sizeof(gStatusLine));
+	// sprintf(String, "ADDR 0001020304050607 TEXT");
+	// UI_PrintStringSmallest(String, 0, 0, true, true);
+	ST7565_BlitStatusLine();
+	preventKeyDown = false;
 	while (isInitialized)
 	{
 		memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
 		memset(gStatusLine, 0, sizeof(gStatusLine));
-		if (cp_currentState == MENU) CP_UI_DrawMenuInterface();
-		else CP_UI_DrawMainInterface();
+		if (cp_currentState == MENU)
+		{
+			cp_requestAllSatData = !cp_enableDoppler;
+			CP_UI_DrawMenuInterface();
+		}
+		else if (cp_currentState == SUBMENU)
+		{
+			cp_requestAllSatData = false;
+			CP_UI_DrawSubMenuInterface();
+		}
+		else
+		{
+			cp_requestAllSatData = false;
+			CP_UI_DrawMainInterface();
+		}
 
-		if (!isSatpassEnable)
+		if (!cp_tleValid)
+		{
+			cp_i2cReqNewTle = 0;
+		}
+		else if (cp_i2cReqNewTle == 0)
+		{
+			cp_i2cReqNewTle = 1;
+		}
+		if (!cp_enableDoppler)
 		{
 			if (isFreqBackup)
 			{
@@ -1199,11 +1141,37 @@ void CP_APP_RunCoprocessor(void)
 			BK4819_TuneTo(mainFreq.data.down);
 			isFreqBackup = true;
 		}
-		if (isSatpassEnable && !isTransmitting && cp_settings.freqTrackMode != FREQTRACK_OFF)
+
+		if (cp_enableDoppler && !isTransmitting)
 		{
-			dopplerOriginal.data.up = satList[selectedSat].data.uplinkFreq;
-			dopplerOriginal.data.down = satList[selectedSat].data.downlinkFreq;
-			CP_GetDopplerFreq(dopplerOriginal.data, &mainFreq.data, satList[selectedSat].data.currentSpd);
+			if (cp_settings.freqTrackMode == FREQTRACK_FM)
+			{
+				mainFreq.data.up = (satLiveList[cp_selectedSatIdx].uplinkFreq + satLiveList[cp_selectedSatIdx].uplinkDoppler) / 10;
+				mainFreq.data.down = (satLiveList[cp_selectedSatIdx].downlinkFreq - satLiveList[cp_selectedSatIdx].downlinkDoppler) / 10;
+			}
+			else if(cp_settings.freqTrackMode == FREQTRACK_LINEAR)
+			{
+				uint32_t uplinkCenter = (satLiveList[cp_selectedSatIdx].uplinkFreq + satLiveList[cp_selectedSatIdx].uplinkDoppler) / 10;
+				uint32_t downlinkCenter = (satLiveList[cp_selectedSatIdx].downlinkFreq - satLiveList[cp_selectedSatIdx].downlinkDoppler) / 10;
+				int32_t diff;
+				if (cp_settings.currentChannel == CH_TXMASTER)
+				{
+					diff = mainFreq.data.up - uplinkCenter;
+					if (cp_settings.transponderType == NORMAL) mainFreq.data.down = downlinkCenter + diff;
+					else mainFreq.data.down = downlinkCenter - diff;
+				}
+				else if (cp_settings.currentChannel == CH_RXMASTER)
+				{
+					diff = mainFreq.data.down - downlinkCenter;
+					if (cp_settings.transponderType == NORMAL) mainFreq.data.up = uplinkCenter + diff;
+					else mainFreq.data.up = uplinkCenter - diff;
+				}
+			}
+			if (dopplerTuneReq)
+			{
+				BK4819_TuneTo(mainFreq.data.down);
+				dopplerTuneReq = false;
+			}
 		}
 	}
 }
@@ -1216,8 +1184,7 @@ void HandlerTIMER_BASE0(void)
 	tickCnt ++;
 	tickCnt = tickCnt % 100;
 	if (tickCnt == 4)	Tick1s();
-	if (tickCnt % 50 == 3)	Tick500ms();
-	if (tickCnt % 20 == 2)	Tick100ms();
+	if (tickCnt % 20 == 2)	Tick200ms();
 	if (tickCnt % 2 == 1)	Tick20ms();
 	(*(uint32_t*)(0x40064000U + 0x14U)) |= 0x2;	// clear flag
 	(*(uint32_t*)(0x40064000U + 0x10U)) |= 0x2;		// Enable interrupt

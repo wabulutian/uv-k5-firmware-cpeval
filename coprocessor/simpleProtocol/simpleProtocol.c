@@ -1,5 +1,5 @@
 #include "coprocessor/simpleProtocol/simpleProtocol.h"
-
+#include "coprocessor/cp_i2c.h"
 
 // uint8_t* SProto_pktDistributeArr[2] = {0};
 // uint8_t SProto_pktTxBuffer[256];
@@ -84,55 +84,117 @@ uint8_t SProto_rxBuffer[SPROTO_RB_SIZE];
 // 	}
 // }
 
-int8_t SProto_TLEReader(char* buf, uint16_t size)	// demo
-{
-	uint16_t MsgRxLength;
-	uint8_t CHK;
-	int8_t flag;
+// int8_t SProto_TLEReader(char*merged, char**lines, uint16_t size)
+// {
+// 	uint16_t MsgRxLength;
+// 	int8_t flag = 0;
+// 	char tempBuffer[256] = {0}; // 临时缓冲区，用于存储原始数据
+// 	int lineCount = 0;
 
-	SProto_bufferWriteIdx = DMA_CH0->ST & 0xFFFU;
-	if (SProto_bufferWriteIdx == SProto_bufferWriteIdx_old) return MSG_ERR_NO_HEADER;
-	SProto_bufferWriteIdx_old = SProto_bufferWriteIdx;
-	while (1) {
-		// Find Header
-		while (SProto_bufferReadIndex != SProto_bufferWriteIdx &&
-           	SProto_rxBuffer[SProto_bufferReadIndex] != 'S'&&
-           	SProto_rxBuffer[SProto_bufferReadIndex] != 'T'&&
-           	SProto_rxBuffer[SProto_bufferReadIndex] != 'D'&&
-			SProto_rxBuffer[SProto_bufferReadIndex] != 'F') {
-				SProto_bufferReadIndex = RXRB_INDEX(SProto_bufferReadIndex, 1);
-		}
+// 	SProto_bufferWriteIdx = DMA_CH0->ST & 0xFFFU; // DMA指针
+// 	if (SProto_bufferWriteIdx == SProto_bufferWriteIdx_old) return MSG_ERR_NO_HEADER;
+// 	SProto_bufferWriteIdx_old = SProto_bufferWriteIdx;
 
-		if (SProto_bufferReadIndex == SProto_bufferWriteIdx) {
-			return MSG_ERR_NO_HEADER;
-		}
+// 	while (1) {
+// 		// 查找TLE+头
+// 		while (SProto_bufferReadIndex != SProto_bufferWriteIdx &&
+// 				(SProto_rxBuffer[SProto_bufferReadIndex] != 'T' ||
+// 				SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, 1)] != 'L' ||
+// 				SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, 2)] != 'E' ||
+// 				SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, 3)] != '+')) {
+// 			SProto_bufferReadIndex = RXRB_INDEX(SProto_bufferReadIndex, 1);
+// 		}
 
-		flag = SProto_rxBuffer[SProto_bufferReadIndex];
+// 		if (SProto_bufferReadIndex == SProto_bufferWriteIdx) {
+// 			return MSG_ERR_NO_HEADER;
+// 		}
 
-		if (SProto_bufferReadIndex < SProto_bufferWriteIdx) {
-			MsgRxLength = SProto_bufferWriteIdx - SProto_bufferReadIndex;
-		} else {
-			MsgRxLength = (SProto_bufferWriteIdx + sizeof(SProto_rxBuffer)) - SProto_bufferReadIndex;
-		}
-	
-		if (MsgRxLength < 10) {
-      		return MSG_ERR_HEADER_LEN_NOT_MATCH;
-    	}
+// 		// 计算消息长度
+// 		if (SProto_bufferReadIndex < SProto_bufferWriteIdx) {
+// 			MsgRxLength = SProto_bufferWriteIdx - SProto_bufferReadIndex;
+// 		} else {
+// 			MsgRxLength = (SProto_bufferWriteIdx + sizeof(SProto_rxBuffer)) - SProto_bufferReadIndex;
+// 		}
 
-		if (SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, MsgRxLength - 1)] != '$') {
-      		return MSG_ERR_NO_EOP;
-    	}
+// 		if (MsgRxLength < 10) {
+// 			return MSG_ERR_HEADER_LEN_NOT_MATCH;
+// 		}
 
-		memset(buf, 0, size);
-		for (int i = 0; i < MsgRxLength - 2; i ++)
-		{
-			buf[i] = SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, i + 1)];
-		}
-		SProto_bufferReadIndex = SProto_bufferWriteIdx;
+// 		// 查找结束符'$'
+// 		int endPos = -1;
+// 		for (int i = 0; i < MsgRxLength; i++) {
+// 			if (SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, i)] == '$') {
+// 				endPos = i;
+// 				break;
+// 			}
+// 		}
 
-		return flag;
-	}
-}
+// 		if (endPos == -1) {
+// 			return MSG_ERR_NO_EOP;
+// 		}
+
+// 		// 将数据复制到临时缓冲区
+// 		int tempIdx = 0;
+// 		for (int i = 4; i < endPos; i++) { // 跳过"TLE+"
+// 			tempBuffer[tempIdx++] = SProto_rxBuffer[RXRB_INDEX(SProto_bufferReadIndex, i)];
+// 			if (tempIdx >= sizeof(tempBuffer) - 1) break; // 防止溢出
+// 		}
+// 		tempBuffer[tempIdx] = '\0';
+
+// 		// 解析数据行
+// 		memset(lines, 0, 71*5);
+// 		char*line = strtok(tempBuffer, "\r\n");
+// 		while (line != NULL && lineCount < 5) {
+// 			lines[lineCount++] = line;
+// 			line = strtok(NULL, "\r\n");
+// 		}
+
+// 		// 检查是否有足够的数据行
+// 		if (lineCount != 5) {
+// 			return MSG_ERR_DATA_FORMAT;
+// 		}
+
+//         // 手动构建输出字符串，避免使用sprintf
+//         memset(merged, 0, size);
+//         uint16_t pos = 0;
+
+//         // 添加“TLE+”前缀
+//         if (pos + 4 < size) {
+//             merged[pos++] = 'T';
+//             merged[pos++] = 'L';
+//             merged[pos++] = 'E';
+//             merged[pos++] = '+';
+//         } else {
+//             return MSG_ERR_BUFFER_OVERFLOW;
+//         }
+
+//         // 添加每一行数据和分隔符
+//         for (int i = 0; i < lineCount; i++) {
+//             char*src = lines[i];
+//             // 复制当前行
+//             while (*src && pos < size - 1) {
+//                 merged[pos++] =*src++;
+//             }
+
+//             // 添加分隔符'$'
+//             if (pos < size - 1) {
+//                 merged[pos++] = '$';
+//             } else {
+//                 return MSG_ERR_BUFFER_OVERFLOW;
+//             }
+//         }
+
+//         // 确保字符串以null结尾
+//         if (pos > 0 && pos < size) {
+//             merged[pos] = '\0';
+//         }
+
+// 		// 更新读取指针
+// 		SProto_bufferReadIndex = RXRB_INDEX(SProto_bufferReadIndex, endPos + 1);
+
+// 		return 0; // 成功
+// 	}
+// }
 
 // void SProto_PktSend_RPRT(uint8_t rprtValue)
 // {
@@ -202,3 +264,28 @@ int8_t SProto_TLEReader(char* buf, uint16_t size)	// demo
 // 		UART_TRANSMIT(SProto_pktTxBuffer, DATA_PKT_DATA_NUM + 16);
 // 	}
 // }
+
+void SProto_UART_to_I2C_Passthrough(void)
+{
+    uint8_t dataLength;
+    uint16_t i2cAddress = 0x0081;  // I2C设备寄存器地址
+    uint8_t tmp[256];
+
+    // 获取DMA当前写入位置
+    SProto_bufferWriteIdx = DMA_CH0->ST & 0xFFFU;
+
+    // 检查是否有新数据
+    if (SProto_bufferWriteIdx == SProto_bufferReadIndex) 
+	{
+        return 0;  // 无新数据
+    }
+	while (SProto_bufferReadIndex != SProto_bufferWriteIdx)
+	{
+        tmp[dataLength] = SProto_rxBuffer[SProto_bufferReadIndex];
+        SProto_bufferReadIndex = RXRB_INDEX(SProto_bufferReadIndex, 1);
+        dataLength ++;
+	}
+    CP_I2C_Write(i2cAddress, tmp, dataLength);
+
+    return dataLength;  // 返回成功传输的字节数
+}

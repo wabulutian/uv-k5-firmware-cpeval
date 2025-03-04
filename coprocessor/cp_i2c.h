@@ -12,12 +12,7 @@
 #define CP_I2C_DIR_READ					(0U)
 #define CP_I2C_DIR_WRITE				(1U)
 
-void CP_I2C_Info(void *pBuffer);
-void CP_I2C_RTC(void *pBuffer, uint8_t rw);
-void CP_I2C_SATINFO(void *pBuffer, uint8_t index);
-void CP_I2C_TLE(void *pBuffer, uint8_t index);
-void CP_I2C_Site(void *pBuffer);
-void CP_I2C_Freq(void *pBuffer, uint8_t index);
-void CP_I2C_PASSINFO(void *pBuffer, uint8_t index);
+void CP_I2C_Read(uint16_t Address, void *pBuffer, uint16_t len);
+void CP_I2C_Write(uint16_t Address, const void *pBuffer, uint16_t len);
 
 #endif

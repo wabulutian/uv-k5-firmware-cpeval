@@ -22,7 +22,7 @@
 #define SPROTO_MSG_TYPE_RPRT	0x0
 #define	SPROTO_MSG_TYPE_DATA	0x1
 
-#define SPROTO_RB_SIZE       300
+#define SPROTO_RB_SIZE       256
 
 #define MSG_OK							(0)
 #define MSG_ERR_NO_HEADER				(-1)
@@ -30,6 +30,8 @@
 #define MSG_ERR_PACKET_LEN_NOT_MATCH	(-3)
 #define MSG_ERR_CHKSUM_UNMATCH			(-4)
 #define MSG_ERR_NO_EOP					(-5)
+#define MSG_ERR_DATA_FORMAT				(-6)
+#define	MSG_ERR_BUFFER_OVERFLOW			(-7)
 
 typedef struct {
   	uint8_t 	SOM;
@@ -76,10 +78,11 @@ typedef union
 extern uint8_t SProto_rxBuffer[SPROTO_RB_SIZE];
 extern uint16_t SProto_bufferWriteIdx;
 
-uint16_t PktHandler_PktData(un_PktData *src, uint8_t *dst);
+// uint16_t PktHandler_PktData(un_PktData *src, uint8_t *dst);
 // int8_t SProto_IsValidMsg();
 // void SProto_PktSend_RPRT(uint8_t rprtValue);
 // void SProto_PktSend_DATA(uint8_t *srcStart, uint32_t len);
-int8_t SProto_TLEReader(char* buf, uint16_t size);
+// int8_t SProto_TLEReader(char*merged, char**lines, uint16_t size);
+void SProto_UART_to_I2C_Passthrough(void);
 
 #endif

@@ -139,55 +139,27 @@ void CP_UI_DrawEmptyRadar(void)
 	UI_DrawLine(RADAR_CENTER_X - 21, RADAR_CENTER_Y, RADAR_CENTER_X + 21, RADAR_CENTER_Y, true, false);
 	UI_DrawLine(RADAR_CENTER_X, RADAR_CENTER_Y - 15, RADAR_CENTER_X, RADAR_CENTER_Y + 15, true, false);
 }
-#ifdef ENABLE_PASS
-void CP_UI_DrawRadar(un_SatInfo* list, uint8_t index, st_PassInfo pass, uint8_t mode) 
+
+uint8_t CP_UI_DrawRadar(st_satStatusMsgPack *satList, uint8_t selectedIndex, st_satPredict120min_2min pred, enum_satRadarDisplayMode displayMode)
 {
-	st_SatInfo current = list[index].data;
-    int16_t az;
-    int8_t el;
-    int16_t satx, saty, satx1, saty1;
+	st_satStatusMsgPack selectedSat = satList[selectedIndex];
+	int16_t az;
+	int16_t el;
+	int16_t satx, saty, satx1, saty1;
 	int8_t i, j;
+	uint8_t ret = 0;
 
 	CP_UI_DrawEmptyRadar();
 
-	if (mode == 2)
+	if (displayMode == ALL)
 	{
-		if (pass.active != 1) return;
-		// Pass
-		for (i = 0; i < 60; i ++)
-		{
-			az = pass.azElList[i].azimuth / 10;
-			if (pass.azElList[i].elevation <= 0 && pass.azElList[i + 1].elevation <= 0)
-			{
-				el = -pass.azElList[i].elevation / 10.0f;
-				satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-				saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-				PutPixel(satx, saty, 1);
-			}
-			else
-			{
-				az = pass.azElList[i].azimuth / 10;
-				el = pass.azElList[i].elevation / 10;
-				satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-				saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-				az = pass.azElList[i + 1].azimuth / 10;
-				el = pass.azElList[i + 1].elevation / 10;
-				satx1 = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-				saty1 = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-				UI_DrawLine(satx, saty, satx1, saty1, true, true);
-			}
-		}
-	}
-
-	if (mode == 1)
-	{
-		// List
+		
 		for (i = 0; i < 10; i ++)
 		{
-			if (list[i].data.valid != 1) continue;
-			
-			az = list[i].data.currentAz / 10;
-			el = (list[i].data.currentEl < 0 ? (-list[i].data.currentEl / 10) : (list[i].data.currentEl / 10));
+			if (satList[i].valid != 1) continue;
+			ret ++;
+			az = satList[i].satAz_1Deg;
+			el = abs(satList[i].satEl_1Deg);
 			satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
 			saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
 			PutPixel(satx, saty, 1);
@@ -197,67 +169,43 @@ void CP_UI_DrawRadar(un_SatInfo* list, uint8_t index, st_PassInfo pass, uint8_t 
 			PutPixel(satx, saty - 1, 1);
 		}
 	}
-
-	if (current.valid != 1) return;
-    // Current position
-    az = current.currentAz / 10;
-    el = (current.currentEl < 0 ? (-current.currentEl / 10) : (current.currentEl / 10));
-	satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-	saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-	for (i = -3; i < 4; i ++) 
-    {
-		for (j = -2; j < 3; j ++)
-		{
-			PutPixel(satx + i, saty + j, ((i > -3) && (i < 3) && (j > -2) && (j < 2))==(current.currentEl<0));
-		}
-	}
-}
-#else
-void CP_UI_DrawRadar(un_SatInfo* list, uint8_t index, uint8_t mode) 
-{
-	st_SatInfo current = list[index].data;
-    int16_t az;
-    int8_t el;
-    int16_t satx, saty, satx1, saty1;
-	int8_t i, j;
-
-	CP_UI_DrawEmptyRadar();
-
-	if (mode == 1 || mode == 3)
+	else
 	{
-		// List
-		for (i = 0; i < 10; i ++)
-		{
-			if (list[i].data.valid != 1) continue;
-			
-			az = list[i].data.currentAz / 10;
-			el = (list[i].data.currentEl < 0 ? (-list[i].data.currentEl / 10) : (list[i].data.currentEl / 10));
-			satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-			saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-			PutPixel(satx, saty, 1);
-			PutPixel(satx + 1, saty, 1);
-			PutPixel(satx - 1, saty, 1);
-			PutPixel(satx, saty + 1, 1);
-			PutPixel(satx, saty - 1, 1);
-		}
-	}
+		if (selectedSat.valid != 1) return ret;
 
-	if (current.valid != 1) return;
-	if (mode == 3) return;
-    // Current position
-    az = current.currentAz / 10;
-    el = (current.currentEl < 0 ? (-current.currentEl / 10) : (current.currentEl / 10));
-	satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
-	saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
-	for (i = -3; i < 4; i ++) 
-    {
-		for (j = -2; j < 3; j ++)
+		if (displayMode == SINGLE_WITH_PREDICT)
 		{
-			PutPixel(satx + i, saty + j, ((i > -3) && (i < 3) && (j > -2) && (j < 2))==(current.currentEl<0));
+			for (i = 0; i < 59; i ++)
+			{
+				az = pred.az_2Deg[i];
+				el = abs(pred.el_2Deg[i]);
+				satx = RADAR_CENTER_X + ((45-el) / 3) * (sinLUT2deg100[az] * 1.4f / 100.0f);
+				saty = RADAR_CENTER_Y - ((45-el) / 3) * (cosLUT2deg100[az] / 100.0f);
+				az = pred.az_2Deg[i + 1];
+				el = abs(pred.el_2Deg[i + 1]);
+				satx1 = RADAR_CENTER_X + ((45-el) / 3) * (sinLUT2deg100[az] * 1.4f / 100.0f);
+				saty1 = RADAR_CENTER_Y - ((45-el) / 3) * (cosLUT2deg100[az] / 100.0f);
+
+				UI_DrawLine(satx, saty, satx1, saty1, true, pred.el_2Deg[i] > 0);
+			}
 		}
+		
+		az = selectedSat.satAz_1Deg;
+		el = abs(selectedSat.satEl_1Deg);
+		satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+		saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+
+		for (i = -3; i < 4; i ++) 
+		{
+			for (j = -2; j < 3; j ++)
+			{
+				PutPixel(satx + i, saty + j, ((i > -3) && (i < 3) && (j > -2) && (j < 2))==(selectedSat.satEl_1Deg < 0));
+			}
+		}
+		ret = 1;
 	}
+	return ret;
 }
-#endif
 
 void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, enum_FrequencyTrackMode mode, bool isFreqInputMode, char* p_freqInputString, bool isTx)
 {
@@ -368,38 +316,9 @@ void CP_UI_DrawChannelIcon(enum_FreqChannel currentChannel)
 		gFrameBuffer[1][104] |= 0b00011111;
 	}
 }
-#ifdef ENABLE_PASS
-void CP_UI_DrawSatInfo(st_SatInfo src, st_PassInfo pass)
-{
-	if (src.valid != 1 || pass.active != 1) return;
-	sprintf(String, "%s", src.name);
-	UI_PrintStringSmallest(String, 35, 33, false, true);
 
-	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
-	UI_PrintStringSmallest(String, 35, 41, false, true);
 
-	if (pass.aosMin > 180) sprintf(String2, "Next >3:00");
-	else if (pass.aosMin == 0) sprintf(String2, "Next <0:01");
-	else sprintf(String2, "Next %d:%02d", pass.aosMin / 60, pass.aosMin % 60);
-	UI_PrintStringSmallest(String2, 35, 49, false, true);
-}
-#else
-void CP_UI_DrawSatInfo(st_SatInfo src)
-{
-	if (!src.valid) return;
-
-	sprintf(String, "%s", src.name);
-	UI_PrintStringSmallest(String, 35, 33, false, true);
-
-	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
-	UI_PrintStringSmallest(String, 35, 41, false, true);
-
-	sprintf(String, "dV: %d", src.currentSpd);
-	UI_PrintStringSmallest(String, 35, 49, false, true);
-}
-#endif
-
-void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw, uint8_t battLevel, st_Time time)
+void CP_UI_DrawStatusBarInMainScreen(st_time24MsgPack time, uint8_t battLevel, bool gnss, uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw)
 {
 	gStatusLine[127] = 0b00111111;
 	for (int i = 126; i >= 116; i--) 
@@ -418,11 +337,14 @@ void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_Fil
 	gStatusLine[116] = 0b00001100;
 
 	sprintf(String, "%02d:%02d:%02d", 
-			time.hour, time.min, time.sec);
+			time.hh, time.mm, time.ss);
 	UI_PrintStringSmallest(String, 0, 0, true, true);
+
+	if (gnss) UI_PrintStringSmallest("G", 40, 0, true, true);
+
 	sprintf(String, "%s %s",
-			modulationTypeOptions[modulation],
-			bwNames[bw]);
+		modulationTypeOptions[modulation],
+		bwNames[bw]);
 	UI_PrintStringSmallest(String, 72, 0, true, true);
 
 	if (freqStep > 4) return;
@@ -435,71 +357,149 @@ void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_Fil
 	}
 }
 
-void CP_UI_Menu_DrawSatList(uint8_t menuSelectIdx, un_SatInfo* satInfoList, bool enable, uint8_t selectedIdx)
+void CP_UI_DrawStatusBarInMenu(st_time24MsgPack time, uint8_t battLevel, bool gnss)
 {
-	uint8_t offset = Clamp(menuSelectIdx - 2, 0, 11 - 6);
-	for (int i = 0; i < 6; ++i) {
-
-		if (i + offset == 0) sprintf(String, "DISABLE");
-		else if (satInfoList[i + offset - 1].data.valid != 1) sprintf(String, "NO DATA");
-		else sprintf(String, "%s", satInfoList[i + offset - 1].data.name);
-		String[10] = 0;
-		
-		if (menuSelectIdx == (i + offset)) {
-			UI_PrintStringSmallBold(String, 0, 80, i);
-		} else {
-			UI_PrintStringSmall(String, 0, 80, i);
-		}
-
-		if ((selectedIdx * enable) == (i + offset))
+	gStatusLine[127] = 0b00111111;
+	for (int i = 126; i >= 116; i--) 
+	{
+		gStatusLine[i] = 0b00100001;
+	}
+	battLevel <<= 1;
+	for (int i = 125; i >= 116; i--) 
+	{
+		if (126 - i <= battLevel) 
 		{
-			gFrameBuffer[i][72] = 0b00011000;
-			gFrameBuffer[i][73] = 0b00111100;
-			gFrameBuffer[i][74] = 0b01111110;
+			gStatusLine[i + 2] = 0b00111111;
 		}
 	}
+	gStatusLine[117] = 0b00111111;
+	gStatusLine[116] = 0b00001100;
 
-	for (int i = 0; i < 6; i++) {
+	sprintf(String, "%02d:%02d:%02d", 
+			time.hh, time.mm, time.ss);
+	UI_PrintStringSmallest(String, 0, 0, true, true);
+
+	if (gnss) UI_PrintStringSmallest("G", 40, 0, true, true);
+}
+
+void CP_UI_SubMenu_DrawSingleSatInfo(st_satStatusMsgPack *satInfoList, uint8_t selectedSatIdx)
+{
+	if (satInfoList[selectedSatIdx].valid == 0)
+	{
+		UI_PrintStringSmallest("NO DATA", 78, 8, false, true);
+		return;
+	}
+	
+	sprintf(String, "A:%03d E:%03d", 
+		satInfoList[selectedSatIdx].satAz_1Deg, 
+		satInfoList[selectedSatIdx].satEl_1Deg);
+	UI_PrintStringSmallest(String, 78, 0, false, true);
+
+	sprintf(String, "U:%09d", 
+		(satInfoList[selectedSatIdx].uplinkFreq + satInfoList[selectedSatIdx].uplinkDoppler));
+	UI_PrintStringSmallest(String, 78, 8, false, true);
+
+	sprintf(String, "D:%09d", 
+		(satInfoList[selectedSatIdx].downlinkFreq - satInfoList[selectedSatIdx].downlinkDoppler));
+	UI_PrintStringSmallest(String, 78, 16, false, true);
+}
+
+void CP_UI_SubMenu_DrawGnssInfo(st_time24MsgPack *time, st_siteInfoMsgPack *site, bool fixed)
+{
+	if (!fixed) UI_PrintStringSmallest("LOCATING", 78, 8, false, true);
+	else UI_PrintStringSmallest("FIXED", 78, 8, false, true);
+
+	sprintf(String, "%02d:%02d:%02d", time->hh, time->mm, time->ss);
+	UI_PrintStringSmallest(String, 78, 16, false, true);
+
+	sprintf(String, "%03d.%03d%c", site->siteLat_Deg, site->siteLat_0_001Deg, site->NS);
+	UI_PrintStringSmallest(String, 78, 24, false, true);
+
+	sprintf(String, "%03d.%03d%c", site->siteLon_Deg, site->siteLon_0_001Deg, site->EW);
+	UI_PrintStringSmallest(String, 78, 32, false, true);
+
+	UI_PrintStringSmallest(site->siteMaidenhead, 78, 40, false, true);
+
+}
+
+void CP_UI_SubMenu_DrawGnssInfo_Detail(st_time24MsgPack *time, st_siteInfoMsgPack *site, char* gnrmc, int8_t tz, bool fixed)
+{
+	UI_PrintStringSmallBold("GNSS INFO", 0, 127, 0);
+	if (tz >= 0) sprintf(String, "%02d:%02d:%02d GMT+%02d", time->hh, time->mm, time->ss, tz);
+	else sprintf(String, "%02d:%02d:%02d GMT-%02d", time->hh, time->mm, time->ss, -tz);
+	UI_PrintStringSmall(String, 8, 128, 1);
+
+	if (fixed) UI_PrintStringSmallBold("LOCATION FOUND", 0, 127, 2);
+	else UI_PrintStringSmall("LOCATING", 0, 127, 2);
+
+	sprintf(String, "%03d.%03d%c %03d.%03d%c %s", 
+		site->siteLat_Deg, site->siteLat_0_001Deg, site->NS,
+		site->siteLon_Deg, site->siteLon_0_001Deg, site->EW,
+		site->siteMaidenhead);
+	UI_PrintStringSmallest(String, 10, 24, false, true);
+
+	UI_PrintStringSmallest(gnrmc, 0, 32, false, true);
+}
+
+void CP_UI_SubMenu_DrawTleInfo(char* tleString, uint8_t slot, bool tleValid, bool isDeleteMode)
+{
+	UI_PrintStringSmallBold("TLE IMPORTER", 0, 127, 0);
+	if (isDeleteMode) sprintf(String, "DELETE>>SLOT%02d", slot);
+	else
+	{
+		if (!tleValid) sprintf(String, "INVALID>>SLOT%02d", slot);
+		else sprintf(String, "VALID>>SLOT%02d", slot);
+	}
+	UI_PrintStringSmall(String, 0, 127, 1);
+
+	UI_PrintStringSmallest(tleString, 0, 24, false, true);
+}
+
+void CP_UI_DrawListFrame()
+{
+	for (int i = 0; i < 7; i++) {
 		gFrameBuffer[i][75] = 0xFF;
 	}
 	for (int i = 0; i < 75; i++) {
-		gFrameBuffer[5][i] |= 0b10000000;
+		gFrameBuffer[0][i] |= 0b10000000;
 	}
 }
 
-#ifdef ENABLE_PASS
-void CP_UI_Menu_DrawSatInfo(st_SatInfo src, st_PassInfo pass)
+void CP_UI_Menu_DrawMenuList(char *title, uint8_t menuSelectIdx, char **itemList, uint8_t itemCount)
 {
-	if (src.valid != 1 || pass.active != 1) return;
-
-	sprintf(String, "%s", src.name);
-	UI_PrintStringSmallest(String, 77, 0, false, true);
-	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
-	UI_PrintStringSmallest(String, 77, 8, false, true);
-	sprintf(String, "%03d.%03d | %03d.%03d", 
-		src.uplinkFreq / 100000, (src.uplinkFreq / 100) % 1000,
-		src.downlinkFreq / 100000, (src.downlinkFreq / 100) % 1000);
-	UI_PrintStringSmallest(String, 2, 49, false, true);
-
-	if (pass.aosMin > 180) sprintf(String, ">3:00");
-	else if (pass.aosMin == 0) sprintf(String, "<0:01");
-	else sprintf(String, "%d:%02d", pass.aosMin / 60, pass.aosMin % 60);
-	UI_PrintStringSmallest(String, 77, 16, false, true);
+	uint8_t offset = 0;
+	if (itemCount >= 5) offset = Clamp(menuSelectIdx - 2, 0, itemCount - 6);
+	UI_PrintStringSmallBold(title, 0, 80, 0);
+	for (int i = 0; i < Clamp(itemCount, 1, 6); i ++) 
+	{
+		sprintf(String, "%s", itemList[i + offset]);
+		String[10] = 0;
+		
+		if (menuSelectIdx == (i + offset)) {
+			UI_PrintStringSmallBold(String, 0, 80, i + 1);
+		} else {
+			UI_PrintStringSmall(String, 0, 80, i + 1);
+		}
+	}
+	CP_UI_DrawListFrame();
 }
-#else
-void CP_UI_Menu_DrawSatInfo(st_SatInfo src)
+
+void CP_UI_Menu_DrawSatList(char *title, st_satStatusMsgPack *satInfoList, uint8_t selectedSatIdx, bool enableDoppler, uint8_t dopplerIdx)
 {
-	if (!src.valid) return;
+	uint8_t offset = Clamp(selectedSatIdx - 2, 0, 10 - 6);
+	UI_PrintStringSmallBold(title, 0, 80, 0);
+	for (int i = 0; i < 6; i ++) 
+	{
+		sprintf(String, "%s", satInfoList[i + offset].valid ? satInfoList[i + offset].name : "---");
+		String[10] = 0;
+		
+		if (selectedSatIdx == (i + offset)) {
+			UI_PrintStringSmallBold(String, 0, 80, i + 1);
+		} else {
+			UI_PrintStringSmall(String, 0, 80, i + 1);
+		}
 
-	sprintf(String, "%s", src.name);
-	UI_PrintStringSmallest(String, 77, 0, false, true);
-	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
-	UI_PrintStringSmallest(String, 77, 8, false, true);
-	sprintf(String, "dV: %d", src.currentSpd);
-	UI_PrintStringSmallest(String, 77, 16, false, true);
-	sprintf(String, "%03d.%03d | %03d.%03d", 
-		src.uplinkFreq / 100000, (src.uplinkFreq / 100) % 1000,
-		src.downlinkFreq / 100000, (src.downlinkFreq / 100) % 1000);
-	UI_PrintStringSmallest(String, 2, 49, false, true);
+		if (enableDoppler && dopplerIdx == (i + offset)) UI_PrintStringSmall(">", 0, 0, i + 1);
+	}
+	CP_UI_DrawListFrame();
 }
-#endif

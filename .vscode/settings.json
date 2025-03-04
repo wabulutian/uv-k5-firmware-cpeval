@@ -26,6 +26,7 @@
         "streambuf": "c",
         "regex": "c",
         "coprocessor.h": "c",
-        "cp_def.h": "c"
+        "cp_def.h": "c",
+        "measurements.h": "c"
     }
 }

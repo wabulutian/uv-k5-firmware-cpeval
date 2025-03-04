@@ -37,16 +37,6 @@
 #include "coprocessor/cp_uart.h"
 #include "coprocessor/cp_ui.h"
 
-typedef struct
-{
-	enum_FreqChannel		currentChannel;
-	enum_TxMode				txMode;
-	uint8_t					ctcssToneIdx;
-    enum_TransponderType	transponderType;
-	enum_FrequencyTrackMode	freqTrackMode;
-}st_CpSettings;
-
-
 void CP_APP_ExitCoprocessor(void);
 void CP_APP_RunCoprocessor(void);
 #endif

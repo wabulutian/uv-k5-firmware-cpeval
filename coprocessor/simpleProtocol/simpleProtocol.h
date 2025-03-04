@@ -8,11 +8,12 @@
 #include "bsp/dp32g030/gpio.h"
 #include "ARMCM0.h"
 #include <stdbool.h>
+#include <string.h>
 #include <stdint.h>
 
 #define UART_TRANSMIT(x, y)	UART_Send(x, y)
 #define RXRB_INDEX(x, y) (((x) + (y)) % sizeof(SProto_rxBuffer))
-#define	DATA_PKT_DATA_NUM	512
+#define	DATA_PKT_DATA_NUM	128
 
 #define	SPROTO_MSG_HEADER_SOM	0xAB
 #define	SPROTO_MSG_PKT_SOP		0xAA
@@ -21,7 +22,7 @@
 #define SPROTO_MSG_TYPE_RPRT	0x0
 #define	SPROTO_MSG_TYPE_DATA	0x1
 
-#define SPROTO_RB_SIZE       800
+#define SPROTO_RB_SIZE       300
 
 #define MSG_OK							(0)
 #define MSG_ERR_NO_HEADER				(-1)
@@ -71,13 +72,14 @@ typedef union
 	uint8_t		array[DATA_PKT_DATA_NUM + 10];
 }un_PktData;
 
+// extern uint8_t* SProto_pktDistributeArr[2];
 extern uint8_t SProto_rxBuffer[SPROTO_RB_SIZE];
-extern uint8_t* SProto_pktDistributeArr[2];
 extern uint16_t SProto_bufferWriteIdx;
 
 uint16_t PktHandler_PktData(un_PktData *src, uint8_t *dst);
-int8_t SProto_IsValidMsg();
-void SProto_PktSend_RPRT(uint8_t rprtValue);
-void SProto_PktSend_DATA(uint8_t *srcStart, uint32_t len);
+// int8_t SProto_IsValidMsg();
+// void SProto_PktSend_RPRT(uint8_t rprtValue);
+// void SProto_PktSend_DATA(uint8_t *srcStart, uint32_t len);
+int8_t SProto_TLEReader(char* buf, uint16_t size);
 
 #endif

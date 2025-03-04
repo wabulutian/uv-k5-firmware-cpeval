@@ -1,3 +1,31 @@
 {
-    "makefile.makefilePath": "Makefile"
+    "makefile.makefilePath": "Makefile",
+    "files.associations": {
+        "font.h": "c",
+        "cp_i2c.h": "c",
+        "simpleprotocol.h": "c",
+        "cp_ui.h": "c",
+        "radio.h": "c",
+        "chrono": "c",
+        "random": "c",
+        "limits": "c",
+        "typeinfo": "c",
+        "i2c.h": "c",
+        "array": "c",
+        "*.tcc": "c",
+        "bitset": "c",
+        "string": "c",
+        "vector": "c",
+        "string_view": "c",
+        "functional": "c",
+        "iomanip": "c",
+        "istream": "c",
+        "ostream": "c",
+        "ratio": "c",
+        "sstream": "c",
+        "streambuf": "c",
+        "regex": "c",
+        "coprocessor.h": "c",
+        "cp_def.h": "c"
+    }
 }

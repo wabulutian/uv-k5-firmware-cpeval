@@ -200,8 +200,7 @@ void UI_DisplaySmallDigits(uint8_t Size, const char *pString, uint8_t X,
   uint8_t i;
 
   for (i = 0; i < Size; i++) {
-    memcpy(gFrameBuffer[Y] + (i * 7) + X, gFontSmallDigits[(uint8_t)pString[i]],
-           7);
+    memcpy(gFrameBuffer[Y] + (i * 7) + X, gFontSmallDigits[(uint8_t)pString[i]], 7);
   }
 }
 
@@ -237,7 +236,7 @@ void UI_PrintStringSmallest(const char *pString, uint8_t x, uint8_t y,
   uint8_t pixels;
   const uint8_t *p = (const uint8_t *)pString;
 
-  while ((c = *p++) && c != '\0') {
+  while ((c = *p++) && c != '\0' && c >= ' ') {
     c -= 0x20;
     for (int i = 0; i < 3; ++i) {
       pixels = gFont3x5[c][i];

@@ -2,17 +2,10 @@
 
 uint8_t cp_menuItemNum = 5;
 const char* cp_freqChangeStepDisp[] = {"100k", "10k ", "1k  ", "0.1k"};
-static const char cp_menuList[][7] = {
-	"PASS",
-	"SAT",
-	"QTH",
-	"TIME",
-	"PRED"
-};
 static char String[32];
 static char String2[32];
 
-void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
+void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill, bool bold)
 {
 	uint8_t i = 0;
 	int8_t DeltaY = 0, DeltaX = 0;
@@ -36,6 +29,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 			for(y1 = y1; y1<=y2; y1 ++)
 			{
 				PutPixel(x1, y1, fill);
+				if (bold)
+				{
+					PutPixel(x1 + 1, y1, fill);
+					PutPixel(x1 - 1, y1, fill);
+					PutPixel(x1, y1 + 1, fill);
+					PutPixel(x1, y1 - 1, fill);
+				}
 			}
 		}
         else if(y1>y2)
@@ -43,6 +43,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 			for(y2 = y2; y2 <= y1; y2 ++)
 			{
 				PutPixel(x1, y2, fill);
+				if (bold)
+				{
+					PutPixel(x1 + 1, y2, fill);
+					PutPixel(x1 - 1, y2, fill);
+					PutPixel(x1, y2 + 1, fill);
+					PutPixel(x1, y2 - 1, fill);
+				}
 			}
 		}
 	}
@@ -51,6 +58,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 		for(x1 = x1; x1 <= x2; x1++)
 		{
 			PutPixel(x1, y1, fill);
+			if (bold)
+			{
+				PutPixel(x1 + 1, y1, fill);
+				PutPixel(x1 - 1, y1, fill);
+				PutPixel(x1, y1 + 1, fill);
+				PutPixel(x1, y1 - 1, fill);
+			}
 		}	
 	}
 	else
@@ -62,6 +76,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 			for(x1 = x1; x1 <= x2; x1 ++)
 			{
 				PutPixel(x1,(int)(k * x1 + b), fill);
+				if (bold)
+				{
+					PutPixel(x1 + 1,(int)(k * x1 + b), fill);
+					PutPixel(x1 - 1,(int)(k * x1 + b), fill);
+					PutPixel(x1,(int)(k * x1 + b + 1), fill);
+					PutPixel(x1,(int)(k * x1 + b - 1), fill);
+				}
 			}
 		}
 		else if((k >= 1) || (k <= -1))
@@ -71,6 +92,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 				for(y1 = y1; y1 <= y2; y1 ++)
 				{
 					PutPixel((int)((y1 - b) / k), y1, fill);
+					if (bold)
+					{
+						PutPixel((int)((y1 - b) / k + 1), y1, fill);
+						PutPixel((int)((y1 - b) / k - 1), y1, fill);
+						PutPixel((int)((y1 - b) / k), y1 + 1, fill);
+						PutPixel((int)((y1 - b) / k), y1 - 1, fill);
+					}
 				}
 			}
             else if(y1>y2)
@@ -78,6 +106,13 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 				for(y2 = y2; y2 <= y1; y2 ++)
 				{
 					PutPixel((int)((y2 - b) / k), y2, fill);
+					if (bold)
+					{
+						PutPixel((int)((y2 - b) / k + 1), y2, fill);
+						PutPixel((int)((y2 - b) / k - 1), y2, fill);
+						PutPixel((int)((y2 - b) / k), y2 + 1, fill);
+						PutPixel((int)((y2 - b) / k), y2 - 1, fill);
+					}
 				}
 			}
 		}
@@ -88,12 +123,12 @@ void UI_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, bool fill)
 void UI_DrawCircle(int centerx, int centery, int radius) 
 {
     // X-axis multiplied by 1.4 because the pixel shape is not square
-    // So @radius represents the actual scale of the Y-axis
+    // So radius represents the actual scale of the Y-axis
 	for (int i = 1; i < 180; i ++) 
     {
-		UI_DrawLine(centerx + radius * 1.4f * cosLUT2deg[i], centery + radius * sinLUT2deg[i], 
-				centerx + radius * 1.4f * cosLUT2deg[i - 1], centery + radius * sinLUT2deg[i - 1],
-				true);
+		UI_DrawLine(centerx + radius * 1.4f * (sinLUT2deg100[i] / 100.0f), centery - radius * (cosLUT2deg100[i] / 100.0f), 
+				centerx + radius * 1.4f * (sinLUT2deg100[i - 1] / 100.0f), centery - radius * (cosLUT2deg100[i - 1] / 100.0f),
+				true, false);
 	}
 }
 
@@ -101,48 +136,128 @@ void CP_UI_DrawEmptyRadar(void)
 {
     UI_DrawCircle(RADAR_CENTER_X, RADAR_CENTER_Y, 15);
 	UI_DrawCircle(RADAR_CENTER_X, RADAR_CENTER_Y, 7);
-	UI_DrawLine(RADAR_CENTER_X - 21, RADAR_CENTER_Y, RADAR_CENTER_X + 21, RADAR_CENTER_Y, true);
-	UI_DrawLine(RADAR_CENTER_X, RADAR_CENTER_Y - 15, RADAR_CENTER_X, RADAR_CENTER_Y + 15, true);
+	UI_DrawLine(RADAR_CENTER_X - 21, RADAR_CENTER_Y, RADAR_CENTER_X + 21, RADAR_CENTER_Y, true, false);
+	UI_DrawLine(RADAR_CENTER_X, RADAR_CENTER_Y - 15, RADAR_CENTER_X, RADAR_CENTER_Y + 15, true, false);
 }
-
-void CP_UI_DrawRadar(st_PassInfo pass) 
+#ifdef ENABLE_PASS
+void CP_UI_DrawRadar(un_SatInfo* list, uint8_t index, st_PassInfo pass, uint8_t mode) 
 {
-    uint16_t az;
-    uint8_t el;
-    uint16_t satx, saty;
-    int16_t i;
+	st_SatInfo current = list[index].data;
+    int16_t az;
+    int8_t el;
+    int16_t satx, saty, satx1, saty1;
+	int8_t i, j;
 
 	CP_UI_DrawEmptyRadar();
 
-    // Track
-    for (i = 1; i < 10; i ++)
-    {
-        uint16_t az0 = pass.azimuthList[i-1];
-        uint8_t el0 = pass.elevationList[i-1];
-        uint16_t satx0 = RADAR_CENTER_X + (el0 / 6) * cosLUT2deg[az0 / 2] * 1.4f;
-	    uint16_t saty0 = RADAR_CENTER_Y + (el0 / 6) * sinLUT2deg[az0 / 2];
+	if (mode == 2)
+	{
+		if (pass.active != 1) return;
+		// Pass
+		for (i = 0; i < 60; i ++)
+		{
+			az = pass.azElList[i].azimuth / 10;
+			if (pass.azElList[i].elevation <= 0 && pass.azElList[i + 1].elevation <= 0)
+			{
+				el = -pass.azElList[i].elevation / 10.0f;
+				satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+				saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+				PutPixel(satx, saty, 1);
+			}
+			else
+			{
+				az = pass.azElList[i].azimuth / 10;
+				el = pass.azElList[i].elevation / 10;
+				satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+				saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+				az = pass.azElList[i + 1].azimuth / 10;
+				el = pass.azElList[i + 1].elevation / 10;
+				satx1 = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+				saty1 = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+				UI_DrawLine(satx, saty, satx1, saty1, true, true);
+			}
+		}
+	}
 
-        uint16_t az1 = pass.azimuthList[i];
-        uint8_t el1 = pass.elevationList[i];
-        uint16_t satx1 = RADAR_CENTER_X + (el1 / 6) * cosLUT2deg[az1 / 2] * 1.4f;
-	    uint16_t saty1 = RADAR_CENTER_Y + (el1 / 6) * sinLUT2deg[az1 / 2];
+	if (mode == 1)
+	{
+		// List
+		for (i = 0; i < 10; i ++)
+		{
+			if (list[i].data.valid != 1) continue;
+			
+			az = list[i].data.currentAz / 10;
+			el = (list[i].data.currentEl < 0 ? (-list[i].data.currentEl / 10) : (list[i].data.currentEl / 10));
+			satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+			saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+			PutPixel(satx, saty, 1);
+			PutPixel(satx + 1, saty, 1);
+			PutPixel(satx - 1, saty, 1);
+			PutPixel(satx, saty + 1, 1);
+			PutPixel(satx, saty - 1, 1);
+		}
+	}
 
-        UI_DrawLine(satx0, saty0, satx1, saty1, true);
-    }
-
+	if (current.valid != 1) return;
     // Current position
-    az = pass.sat->currentAz;
-    el = pass.sat->currentEl;
-	satx = RADAR_CENTER_X + (el / 6) * cosLUT2deg[az / 2] * 1.4f;
-	saty = RADAR_CENTER_Y + (el / 6) * sinLUT2deg[az / 2];
-	for (i = -2; i < 3; i ++) 
+    az = current.currentAz / 10;
+    el = (current.currentEl < 0 ? (-current.currentEl / 10) : (current.currentEl / 10));
+	satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+	saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+	for (i = -3; i < 4; i ++) 
     {
-		PutPixel(satx + i, saty + i, true);
-		PutPixel(satx + i, saty - i, true);
-		PutPixel(satx, saty + i, true);
-		PutPixel(satx + i, saty, true);
+		for (j = -2; j < 3; j ++)
+		{
+			PutPixel(satx + i, saty + j, ((i > -3) && (i < 3) && (j > -2) && (j < 2))==(current.currentEl<0));
+		}
 	}
 }
+#else
+void CP_UI_DrawRadar(un_SatInfo* list, uint8_t index, uint8_t mode) 
+{
+	st_SatInfo current = list[index].data;
+    int16_t az;
+    int8_t el;
+    int16_t satx, saty, satx1, saty1;
+	int8_t i, j;
+
+	CP_UI_DrawEmptyRadar();
+
+	if (mode == 1 || mode == 3)
+	{
+		// List
+		for (i = 0; i < 10; i ++)
+		{
+			if (list[i].data.valid != 1) continue;
+			
+			az = list[i].data.currentAz / 10;
+			el = (list[i].data.currentEl < 0 ? (-list[i].data.currentEl / 10) : (list[i].data.currentEl / 10));
+			satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+			saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+			PutPixel(satx, saty, 1);
+			PutPixel(satx + 1, saty, 1);
+			PutPixel(satx - 1, saty, 1);
+			PutPixel(satx, saty + 1, 1);
+			PutPixel(satx, saty - 1, 1);
+		}
+	}
+
+	if (current.valid != 1) return;
+	if (mode == 3) return;
+    // Current position
+    az = current.currentAz / 10;
+    el = (current.currentEl < 0 ? (-current.currentEl / 10) : (current.currentEl / 10));
+	satx = RADAR_CENTER_X + ((90-el) / 6) * (sinLUT2deg100[az / 2] * 1.4f / 100.0f);
+	saty = RADAR_CENTER_Y - ((90-el) / 6) * (cosLUT2deg100[az / 2] / 100.0f);
+	for (i = -3; i < 4; i ++) 
+    {
+		for (j = -2; j < 3; j ++)
+		{
+			PutPixel(satx + i, saty + j, ((i > -3) && (i < 3) && (j > -2) && (j < 2))==(current.currentEl<0));
+		}
+	}
+}
+#endif
 
 void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel channel, enum_FrequencyTrackMode mode, bool isFreqInputMode, char* p_freqInputString, bool isTx)
 {
@@ -159,36 +274,35 @@ void CP_UI_DrawFrequency(uint32_t rx10hz, uint32_t tx10hz, enum_FreqChannel chan
 		UI_PrintStringSmallBold(isFreqInputMode ? p_freqInputString : String2, 0, 127, 1);
 	}
 
-	sprintf(String, "Rx");
-	UI_PrintStringSmallest(String, 5, 1, false, true);
-	if (!isTx) 
+	if (isTx) 
 	{
-		sprintf(String, "Tx");
-		UI_PrintStringSmallest(String, 5, 9, false, true);
-	} else {
 		for (int i = 0; i < 15; i ++) {
 			gFrameBuffer[1][i] = 0b11111111;
 		}
-		sprintf(String, "Tx");
-		UI_PrintStringSmallest(String, 5, 9, false, false);
 	}
+
+	sprintf(String, "Rx");
+	UI_PrintStringSmallest(String, 5, 1, false, 3);
+	sprintf(String, "Tx");
+	UI_PrintStringSmallest(String, 5, 9, false, !isTx);
 }
 
-void CP_UI_DrawQuickMenu(char* item1, char* item2, char* item3, uint8_t sel, bool enable)
+void CP_UI_DrawQuickMenu(char* item1, char* item2, char* item3, uint8_t sel)
 {
     for (int i = 0; i < 3; i ++) 
     {
-		if (sel == i+1) 
-        {
-			for (int j = 0; j < QUICKMENU_CELL_WIDTH; j ++) 
-            {
-				gFrameBuffer[3 + i][j] = 0b11111110;
-			}
+		for (int j = 0; j < QUICKMENU_CELL_WIDTH; j ++) 
+		{
+			gFrameBuffer[3][j] = 0b10000000;
+			gFrameBuffer[4 + i][j] = 0b10000000;
+			if (sel == i+1) gFrameBuffer[4 + i][j] |= 0b01111111;
 		}
+		gFrameBuffer[4 + i][0] |= 0b11111111;
+		gFrameBuffer[4 + i][QUICKMENU_CELL_WIDTH - 1] |= 0b11111111;
     }
-    UI_PrintStringSmallest(item1, 2, 3 * 8 + 2, false, !(enable && sel == 1));
-    UI_PrintStringSmallest(item2, 2, 4 * 8 + 2, false, !(enable && sel == 2));
-    UI_PrintStringSmallest(item3, 2, 5 * 8 + 2, false, !(enable && sel == 3));
+    UI_PrintStringSmallest(item1, 2, 4 * 8 + 1, false, !(sel == 1));
+    UI_PrintStringSmallest(item2, 2, 5 * 8 + 1, false, !(sel == 2));
+    UI_PrintStringSmallest(item3, 2, 6 * 8 + 1, false, !(sel == 3));
 }
 
 void CP_UI_DrawRssi(int dbm, uint8_t s, double enable)
@@ -254,15 +368,38 @@ void CP_UI_DrawChannelIcon(enum_FreqChannel currentChannel)
 		gFrameBuffer[1][104] |= 0b00011111;
 	}
 }
-
-void CP_UI_DrawDateTime(st_Time time)
+#ifdef ENABLE_PASS
+void CP_UI_DrawSatInfo(st_SatInfo src, st_PassInfo pass)
 {
-    //sprintf(String, "%d.%02d.%02d %02d:%02d:%02d", time.year, time.month, time.day, time.hour, time.min, time.sec);
-	sprintf(String, "2024.03.27 23:01:00");
-	UI_PrintStringSmallest(String, 2, 50, false, true);
-}
+	if (src.valid != 1 || pass.active != 1) return;
+	sprintf(String, "%s", src.name);
+	UI_PrintStringSmallest(String, 35, 33, false, true);
 
-void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw, uint8_t battLevel)
+	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
+	UI_PrintStringSmallest(String, 35, 41, false, true);
+
+	if (pass.aosMin > 180) sprintf(String2, "Next >3:00");
+	else if (pass.aosMin == 0) sprintf(String2, "Next <0:01");
+	else sprintf(String2, "Next %d:%02d", pass.aosMin / 60, pass.aosMin % 60);
+	UI_PrintStringSmallest(String2, 35, 49, false, true);
+}
+#else
+void CP_UI_DrawSatInfo(st_SatInfo src)
+{
+	if (!src.valid) return;
+
+	sprintf(String, "%s", src.name);
+	UI_PrintStringSmallest(String, 35, 33, false, true);
+
+	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
+	UI_PrintStringSmallest(String, 35, 41, false, true);
+
+	sprintf(String, "dV: %d", src.currentSpd);
+	UI_PrintStringSmallest(String, 35, 49, false, true);
+}
+#endif
+
+void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_FilterBandwidth_t bw, uint8_t battLevel, st_Time time)
 {
 	gStatusLine[127] = 0b00111111;
 	for (int i = 126; i >= 116; i--) 
@@ -280,33 +417,89 @@ void CP_UI_DrawStatusBar(uint8_t freqStep, ModulationType modulation, BK4819_Fil
 	gStatusLine[117] = 0b00111111;
 	gStatusLine[116] = 0b00001100;
 
+	sprintf(String, "%02d:%02d:%02d", 
+			time.hour, time.min, time.sec);
+	UI_PrintStringSmallest(String, 0, 0, true, true);
+	sprintf(String, "%s %s",
+			modulationTypeOptions[modulation],
+			bwNames[bw]);
+	UI_PrintStringSmallest(String, 72, 0, true, true);
+
+	if (freqStep > 4) return;
+
 	uint8_t stepIndcStart = freqStep == 3 ? 76 : (48 + freqStep * 7);
 	for (int i = 0; i < 6; i ++) 
 	{
 		gStatusLine[i + stepIndcStart] |= 0b01000000;
 		gFrameBuffer[2][i + stepIndcStart] |= 0b00000001;
 	}
-
-	sprintf(String, "%s %s",
-			modulationTypeOptions[modulation],
-			bwNames[bw]);
-	UI_PrintStringSmallest(String, 75, 0, true, true);
 }
 
-void CP_UI_Menu_DrawMenuList(uint8_t menuSelectIdx)
+void CP_UI_Menu_DrawSatList(uint8_t menuSelectIdx, un_SatInfo* satInfoList, bool enable, uint8_t selectedIdx)
 {
-	uint8_t offset = Clamp(menuSelectIdx - 2, 0, cp_menuItemNum - 5);
-	for (int i = 0; i < 5; ++i) {
-		const char *s = cp_menuList[i + offset];
-		bool isCurrent = menuSelectIdx == i + offset;
-		if (isCurrent) {
-			UI_PrintStringSmallBold(s, 0, 48, i);
+	uint8_t offset = Clamp(menuSelectIdx - 2, 0, 11 - 6);
+	for (int i = 0; i < 6; ++i) {
+
+		if (i + offset == 0) sprintf(String, "DISABLE");
+		else if (satInfoList[i + offset - 1].data.valid != 1) sprintf(String, "NO DATA");
+		else sprintf(String, "%s", satInfoList[i + offset - 1].data.name);
+		String[10] = 0;
+		
+		if (menuSelectIdx == (i + offset)) {
+			UI_PrintStringSmallBold(String, 0, 80, i);
 		} else {
-			UI_PrintStringSmall(s, 0, 48, i);
+			UI_PrintStringSmall(String, 0, 80, i);
+		}
+
+		if ((selectedIdx * enable) == (i + offset))
+		{
+			gFrameBuffer[i][72] = 0b00011000;
+			gFrameBuffer[i][73] = 0b00111100;
+			gFrameBuffer[i][74] = 0b01111110;
 		}
 	}
 
-	for (int i = 0; i < 7; i++) {
-		gFrameBuffer[i][49] = 0xFF;
+	for (int i = 0; i < 6; i++) {
+		gFrameBuffer[i][75] = 0xFF;
+	}
+	for (int i = 0; i < 75; i++) {
+		gFrameBuffer[5][i] |= 0b10000000;
 	}
 }
+
+#ifdef ENABLE_PASS
+void CP_UI_Menu_DrawSatInfo(st_SatInfo src, st_PassInfo pass)
+{
+	if (src.valid != 1 || pass.active != 1) return;
+
+	sprintf(String, "%s", src.name);
+	UI_PrintStringSmallest(String, 77, 0, false, true);
+	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
+	UI_PrintStringSmallest(String, 77, 8, false, true);
+	sprintf(String, "%03d.%03d | %03d.%03d", 
+		src.uplinkFreq / 100000, (src.uplinkFreq / 100) % 1000,
+		src.downlinkFreq / 100000, (src.downlinkFreq / 100) % 1000);
+	UI_PrintStringSmallest(String, 2, 49, false, true);
+
+	if (pass.aosMin > 180) sprintf(String, ">3:00");
+	else if (pass.aosMin == 0) sprintf(String, "<0:01");
+	else sprintf(String, "%d:%02d", pass.aosMin / 60, pass.aosMin % 60);
+	UI_PrintStringSmallest(String, 77, 16, false, true);
+}
+#else
+void CP_UI_Menu_DrawSatInfo(st_SatInfo src)
+{
+	if (!src.valid) return;
+
+	sprintf(String, "%s", src.name);
+	UI_PrintStringSmallest(String, 77, 0, false, true);
+	sprintf(String, "%03d | %02d", src.currentAz / 10, src.currentEl / 10);
+	UI_PrintStringSmallest(String, 77, 8, false, true);
+	sprintf(String, "dV: %d", src.currentSpd);
+	UI_PrintStringSmallest(String, 77, 16, false, true);
+	sprintf(String, "%03d.%03d | %03d.%03d", 
+		src.uplinkFreq / 100000, (src.uplinkFreq / 100) % 1000,
+		src.downlinkFreq / 100000, (src.downlinkFreq / 100) % 1000);
+	UI_PrintStringSmallest(String, 2, 49, false, true);
+}
+#endif
